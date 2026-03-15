@@ -75,8 +75,8 @@ const createServiceRecord = async (req, res) => {
   });
 
   try {
-    // Delete the related appointment after service completion
-    await appointmentModel.findByIdAndDelete(appointmentId);
+    // Update related appointment status to completed after service completion
+    await appointmentModel.findByIdAndUpdate(appointmentId, { status: "completed" });
     
     // Reduce product quantities in the database
     for (const part of parts) {
@@ -95,7 +95,7 @@ const createServiceRecord = async (req, res) => {
     }
     
     res.status(201).json({
-      message: "Service record created successfully and appointment removed",
+      message: "Service record created successfully and appointment updated",
       serviceRecord: savedServiceRecord,
     });
   } catch (error) {
@@ -218,8 +218,91 @@ const getServiceRecordsByCustomerId = async (req, res) => {
   }
 };
 
+// Get service record by employee ID
+const getServiceRecordsByEmployeeId = async (req, res) => {
+  console.log('====================================');
+  console.log('Calling ... ', req.params.employeeId);
+  console.log('====================================');
+  try {
+    const employeeId = req.params.employeeId;
+    const { sortBy = 'recent', limit = 50 } = req.query;
+
+    if (!employeeId) {
+      return res.status(400).json({ message: "Employee ID is required" });
+    }
+
+    // Verify employee exists
+    const employee = await employeeModel.findById(employeeId);
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Build sort object
+    let sortObj = { createdAt: -1 }; // Default: most recent first
+    if (sortBy === 'oldest') {
+      sortObj = { createdAt: 1 };
+    } else if (sortBy === 'amount') {
+      sortObj = { totalAmount: -1 };
+    }
+
+    // Fetch service records
+    const serviceRecords = await serviceRecordModel
+      .find({ employeeId })
+      .populate("employeeId", "name email department")
+      .populate("customerId", "name email contactNumber")
+      .populate("appointmentId", "appointmentDate vehicleNumber")
+      .sort(sortObj)
+      .limit(parseInt(limit));
+
+    // Calculate statistics
+    const totalRecords = await serviceRecordModel.countDocuments({ employeeId });
+    const completedRecords = await serviceRecordModel.countDocuments({ 
+      employeeId, 
+      status: 'completed' 
+    });
+
+    // Format service records for display
+    const formattedRecords = serviceRecords.map(record => ({
+      _id: record._id,
+      date: record.createdAt,
+      vehicleNumber: record.vehicleNumber,
+      description: record.serviceDescription,
+      customer: record.customerId,
+      partsCount: record.parts ? record.parts.length : 0,
+      laborCost: record.laborCost,
+      totalAmount: record.totalAmount,
+      status: record.status,
+      parts: record.parts,
+    }));
+
+    res.status(200).json({
+      success: true,
+      employee: {
+        name: employee.name,
+        email: employee.email,
+        department: employee.department,
+      },
+      statistics: {
+        totalServiceRecords: totalRecords,
+        completedRecords: completedRecords,
+        pendingRecords: totalRecords - completedRecords,
+      },
+      serviceHistory: formattedRecords,
+      message: `Found ${totalRecords} service records for this employee`,
+    });
+  } catch (error) {
+    console.log("Error fetching service records:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching service records",
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   createServiceRecord,
   getServiceRecords,
   getServiceRecordsByCustomerId,
+  getServiceRecordsByEmployeeId,
 };

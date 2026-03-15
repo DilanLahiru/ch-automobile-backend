@@ -189,7 +189,7 @@ const updateAppointment = async (req, res) => {
 
     res.status(200).json({ message: "Appointment updated successfully", appointment });
   } catch (error) {
-    console.error("Error updating appointment:", error);
+    console.log("Error updating appointment:", error);
     res.status(500).json({ message: "Error updating appointment" });
   }
 };
