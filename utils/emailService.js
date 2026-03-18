@@ -200,8 +200,8 @@ const sendAppointmentConfirmationEmail = async (customerEmail, appointment) => {
                         <div class="contact-info">
                             <p><strong>📞 Need to Reschedule or Cancel?</strong></p>
                             <p>Contact us at least 24 hours before your appointment for any changes. We're here to help!</p>
-                            <p>Email: ${process.env.EMAIL_USER || 'support@chautomobile.com'}</p>
-                            <p>Phone: +1 (555) 123-4567</p>
+                            <p>Email: ${process.env.EMAIL_USER || 'chautomob@gmail.com'}</p>
+                            <p>Phone: +94 (71) 427 4163</p>
                         </div>
 
                         <p style="color: #666; font-size: 14px; line-height: 1.6;">
@@ -303,8 +303,8 @@ const sendServiceCompletionEmail = async (customerEmail, customerName, serviceRe
                     <tr style="border-bottom: 1px solid #e0e0e0;">
                         <td style="padding: 12px; color: #333;">${part.name}</td>
                         <td style="padding: 12px; text-align: center; color: #555;">${part.quantity}</td>
-                        <td style="padding: 12px; text-align: right; color: #555;">$${part.price.toFixed(2)}</td>
-                        <td style="padding: 12px; text-align: right; color: #333; font-weight: 600;">$${partTotal.toFixed(2)}</td>
+                        <td style="padding: 12px; text-align: right; color: #555;">Rs. ${part.price.toFixed(2)}</td>
+                        <td style="padding: 12px; text-align: right; color: #333; font-weight: 600;">Rs. ${partTotal.toFixed(2)}</td>
                     </tr>
                 `;
             });
@@ -453,7 +453,7 @@ const sendServiceCompletionEmail = async (customerEmail, customerName, serviceRe
                         <div class="contact-info">
                             <p><strong>📞 Need Assistance?</strong></p>
                             <p>Our customer service team is ready to help!</p>
-                            <p>Email: ${process.env.EMAIL_USER || 'support@chautomobile.com'}</p>
+                            <p>Email: ${process.env.EMAIL_USER || 'chautomob@gmail.com'}</p>
                             <p>Phone: +94 (71) 427 4163</p>
                             <p>Address: 304 A Abaya Street, Kalutara, Sri Lanka</p>
                         </div>
