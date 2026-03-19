@@ -12,6 +12,7 @@ const productRoute = require("./routes/productRoute");
 const categoryRoute = require("./routes/categoryRoute");
 const supplierRoute = require("./routes/supplierRoute");
 const serviceRecordRoute = require("./routes/serviceRecordRoute");
+const serviceTypeRoute = require("./routes/serviceTypeRoute");
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use("/api/product", productRoute);
 app.use("/api/category", categoryRoute);
 app.use("/api/supplier", supplierRoute);
 app.use("/api/service-record", serviceRecordRoute);
+app.use("/api/service-type", serviceTypeRoute);
 
 // ✅ HEALTH CHECK (IMPORTANT)
 app.get("/health", (req, res) => {
