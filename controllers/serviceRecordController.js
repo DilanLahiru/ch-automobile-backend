@@ -1,3 +1,8 @@
+/**
+ * Service Record Controller
+ * Handles service record creation, retrieval, and analytics
+ */
+
 const mongoose = require('mongoose');
 const serviceRecordModel = require("../models/serviceRecordModel");
 const appointmentModel = require("../models/appointmentModel");
@@ -5,298 +10,315 @@ const customerModel = require("../models/customerModel");
 const productModel = require("../models/productModel");
 const employeeModel = require("../models/employeeModel");
 const { sendServiceCompletionEmail } = require("../utils/emailService");
+const logger = require("../utils/logger");
+const { AppError } = require("../utils/errorHandler");
+const { validateRequiredFields } = require("../utils/validation");
 
-const createServiceRecord = async (req, res) => {
-  const {
-    appointmentId,
-    employeeId,
-    customerId,
-    parts,
-    laborCost,
-    totalAmount,
-    status,
-    vehicleNumber,
-    serviceDescription,
-  } = req.body;
-
-  if (
-    !employeeId ||
-    !customerId ||
-    !appointmentId ||
-    !parts ||
-    !Array.isArray(parts) ||
-    parts.length === 0
-  ) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Missing required fields: employeeId, customerId, and parts array",
-      });
-  }
-
-  const customer = await customerModel.findById(customerId);
-  if (!customer) {
-    return res.status(404).json({ message: "Customer not found" });
-  }
-
-  const employee = await employeeModel.findById(employeeId);
-  if (!employee) {
-    return res.status(404).json({ message: "Employee not found" });
-  }
-
-  // Verify all products exist and check stock availability
-  for (const part of parts) {
-    const product = await productModel.findById(part._id);
-    if (!product) {
-      return res
-        .status(404)
-        .json({ message: `Product with ID ${part._id} not found` });
-    }
-    console.log("Product :", product.name, "Quantity:", product.quantity);
-
-    if (product.quantity < part.quantity) {
-      return res.status(400).json({
-        message: `Insufficient stock for product ${product.name}. Available: ${product.quantity}, Requested: ${part.quantity}`,
-      });
-    }
-  }
-
-  const serviceRecord = new serviceRecordModel({
-    appointmentId,
-    employeeId,
-    customerId,
-    parts,
-    laborCost: laborCost || 0,
-    totalAmount: totalAmount || 0,
-    status: status || "pending",
-    vehicleNumber,
-    serviceDescription,
-  });
-
+/**
+ * Create a new service record with parts inventory management
+ * POST /api/service-record/create
+ */
+const createServiceRecord = async (req, res, next) => {
   try {
-    // Update related appointment status to completed after service completion
-    await appointmentModel.findByIdAndUpdate(appointmentId, { status: "completed" });
-    
-    // Reduce product quantities in the database
-    for (const part of parts) {
-      await productModel.findByIdAndUpdate(
-        part._id,
-        { $inc: { quantity: -part.quantity } },
-        { new: true },
-      );
+    const {
+      appointmentId,
+      employeeId,
+      customerId,
+      parts,
+      laborCost,
+      totalAmount,
+      status,
+      vehicleNumber,
+      serviceDescription,
+    } = req.body;
+
+    // Validate required fields
+    const validation = validateRequiredFields(
+      { employeeId, customerId, appointmentId, parts },
+      ['employeeId', 'customerId', 'appointmentId', 'parts']
+    );
+
+    if (!validation.isValid) {
+      logger.warn('Service record creation: Missing required fields', validation.missingFields);
+      return next(new AppError(`Missing required fields: ${validation.missingFields.join(', ')}`, 400));
     }
 
-    const savedServiceRecord = await serviceRecord.save();
-    
-    // Send service completion email to customer
-    if (customer.email) {
-      await sendServiceCompletionEmail(customer.email, customer.name, savedServiceRecord);
+    // Validate parts array
+    if (!Array.isArray(parts) || parts.length === 0) {
+      logger.warn('Service record creation: Invalid parts array');
+      return next(new AppError('Parts array must be provided and not empty', 400));
     }
-    
-    res.status(201).json({
-      message: "Service record created successfully and appointment updated",
-      serviceRecord: savedServiceRecord,
+
+    // Verify references
+    const [customer, employee] = await Promise.all([
+      customerModel.findById(customerId),
+      employeeModel.findById(employeeId),
+    ]);
+
+    if (!customer || !employee) {
+      logger.warn('Service record creation: Customer or Employee not found', { customerId, employeeId });
+      return next(new AppError('Customer or Employee not found', 404));
+    }
+
+    // Verify all parts exist and have sufficient stock
+    for (const part of parts) {
+      const product = await productModel.findById(part._id);
+      
+      if (!product) {
+        logger.warn('Service record creation: Product not found', { productId: part._id });
+        return next(new AppError(`Product with ID ${part._id} not found`, 404));
+      }
+
+      if (product.quantity < part.quantity) {
+        logger.warn('Service record creation: Insufficient stock', { productId: part._id, available: product.quantity, requested: part.quantity });
+        return next(new AppError(`Insufficient stock for ${product.name}. Available: ${product.quantity}, Requested: ${part.quantity}`, 400));
+      }
+    }
+
+    // Create service record
+    const serviceRecord = new serviceRecordModel({
+      appointmentId,
+      employeeId,
+      customerId,
+      parts,
+      laborCost: parseFloat(laborCost) || 0,
+      totalAmount: parseFloat(totalAmount) || 0,
+      status: status || 'pending',
+      vehicleNumber: vehicleNumber ? vehicleNumber.trim() : '',
+      serviceDescription: serviceDescription ? serviceDescription.trim() : '',
     });
+
+    try {
+      // Update appointment status
+      await appointmentModel.findByIdAndUpdate(appointmentId, { status: 'completed' });
+
+      // Reduce product inventory
+      for (const part of parts) {
+        await productModel.findByIdAndUpdate(
+          part._id,
+          { $inc: { quantity: -part.quantity } },
+          { new: true }
+        );
+      }
+
+      // Save service record
+      const savedServiceRecord = await serviceRecord.save();
+
+      // Send completion email
+      try {
+        if (customer.email) {
+          await sendServiceCompletionEmail(customer.email, customer.name, savedServiceRecord);
+        }
+      } catch (emailError) {
+        logger.warn('Error sending service completion email', emailError);
+      }
+
+      logger.info('Service record created successfully', { serviceRecordId: savedServiceRecord._id, customerId });
+
+      res.status(201).json({
+        success: true,
+        message: 'Service record created successfully',
+        data: { serviceRecord: savedServiceRecord },
+      });
+    } catch (dbError) {
+      logger.error('Error saving service record or updating inventory', dbError);
+      throw dbError;
+    }
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Error creating service record" });
+    logger.error('Error creating service record', error);
+    next(error);
   }
 };
 
-const getServiceRecords = async (req, res) => {
+/**
+ * Get all service records (paginated with population)
+ * GET /api/service-record
+ */
+const getServiceRecords = async (req, res, next) => {
   try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
     const serviceRecords = await serviceRecordModel
       .find()
-      .populate("employeeId", "name email")
-      .populate("customerId", "name email contactNumber");
+      .populate('employeeId', 'name email')
+      .populate('customerId', 'name email contactNumber')
+      .populate('appointmentId', 'appointmentDate vehicleNumber')
+      .limit(parseInt(limit))
+      .skip(parseInt(skip))
+      .sort({ createdAt: -1 });
 
-    res.status(200).json(serviceRecords);
+    const total = await serviceRecordModel.countDocuments();
+
+    logger.info('Service records fetched successfully', { count: serviceRecords.length, total });
+
+    res.status(200).json({
+      success: true,
+      message: 'Service records retrieved successfully',
+      data: {
+        serviceRecords,
+        pagination: {
+          current: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Error fetching service records" });
+    logger.error('Error fetching service records', error);
+    next(error);
   }
 };
 
-// Get service history by customer ID with detailed analytics
-const getServiceRecordsByCustomerId = async (req, res) => {
+/**
+ * Get service history by customer ID
+ * GET /api/service-record/customer/:customerId
+ */
+const getServiceRecordsByCustomerId = async (req, res, next) => {
   try {
-    const customerId = req.params.customerId;
-    const { sortBy = 'recent', limit = 50 } = req.query;
+    const { customerId } = req.params;
+    const { sortBy = 'recent', page = 1, limit = 10 } = req.query;
 
     if (!customerId) {
-      return res.status(400).json({ message: "Customer ID is required" });
+      logger.warn('Service record fetch: No customer ID provided');
+      return next(new AppError('Customer ID is required', 400));
     }
 
     // Verify customer exists
     const customer = await customerModel.findById(customerId);
     if (!customer) {
-      return res.status(404).json({ message: "Customer not found" });
+      logger.warn('Service record fetch: Customer not found', { customerId });
+      return next(new AppError('Customer not found', 404));
     }
 
     // Build sort object
-    let sortObj = { createdAt: -1 }; // Default: most recent first
-    if (sortBy === 'oldest') {
-      sortObj = { createdAt: 1 };
-    } else if (sortBy === 'amount') {
-      sortObj = { totalAmount: -1 };
-    }
+    const sortObj = {
+      recent: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      amount: { totalAmount: -1 },
+    }[sortBy] || { createdAt: -1 };
 
-    // Fetch service records
+    const skip = (page - 1) * limit;
+
+    // Fetch service records with pagination
     const serviceRecords = await serviceRecordModel
       .find({ customerId })
-      .populate("employeeId", "name email department")
-      .populate("customerId", "name email contactNumber")
-      .populate("appointmentId", "appointmentDate vehicleNumber")
+      .populate('employeeId', 'name email')
+      .populate('customerId', 'name email contactNumber')
+      .populate('appointmentId', 'appointmentDate vehicleNumber')
       .sort(sortObj)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
 
-    // Calculate statistics
+    // Get totals
     const totalRecords = await serviceRecordModel.countDocuments({ customerId });
-    const completedRecords = await serviceRecordModel.countDocuments({ 
-      customerId, 
-      status: 'completed' 
-    });
-    
-    // const stats = await serviceRecordModel.aggregate([
-    //   { $match: { customerId: new mongoose.Types.ObjectId(customerId) } },
-    //   {
-    //     $group: {
-    //       _id: null,
-    //       totalSpent: { $sum: "$totalAmount" },
-    //       totalLabor: { $sum: "$laborCost" },
-    //       // averageSpent: { $avg: "$totalAmount" },
-    //       // maxSpent: { $max: "$totalAmount" },
-    //       // minSpent: { $min: "$totalAmount" },
-    //     }
-    //   }
-    // ]);
+    const completedRecords = await serviceRecordModel.countDocuments({ customerId, status: 'completed' });
 
-    // Format service records for display
-    const formattedRecords = serviceRecords.map(record => ({
-      _id: record._id,
-      date: record.createdAt,
-      vehicleNumber: record.vehicleNumber,
-      description: record.serviceDescription,
-      //status: record.status,
-      employee: record.employeeId,
-      partsCount: record.parts ? record.parts.length : 0,
-      laborCost: record.laborCost,
-      totalAmount: record.totalAmount,
-      parts: record.parts,
-    }));
+    logger.info('Customer service records fetched successfully', { customerId, count: serviceRecords.length });
 
     res.status(200).json({
       success: true,
-      // customer: {
-      //   name: customer.name,
-      //   email: customer.email,
-      //   contactNumber: customer.contactNumber,
-      // },
-      // statistics: {
-      //   totalServiceRecords: totalRecords,
-      //   completedRecords: completedRecords,
-      //   pendingRecords: totalRecords - completedRecords,
-      //   summary: stats.length > 0 ? stats[0] : {
-      //     totalSpent: 0,
-      //     totalLabor: 0,
-      //     averageSpent: 0,
-      //     maxSpent: 0,
-      //     minSpent: 0,
-      //   }
-      // },
-      serviceHistory: formattedRecords,
-      message: `Found ${totalRecords} service records for this customer`,
+      message: totalRecords === 0 ? 'No service records found' : 'Service records retrieved successfully',
+      data: {
+        customer: {
+          id: customer._id,
+          name: customer.name,
+          email: customer.email,
+          contactNumber: customer.contactNumber,
+        },
+        serviceRecords,
+        statistics: {
+          totalRecords,
+          completedRecords,
+          pendingRecords: totalRecords - completedRecords,
+        },
+        pagination: {
+          current: parseInt(page),
+          limit: parseInt(limit),
+          total: totalRecords,
+          pages: Math.ceil(totalRecords / limit),
+        },
+      },
     });
   } catch (error) {
-    console.error("Error fetching service records:", error);
-    res.status(500).json({ 
-      success: false,
-      message: "Error fetching service records",
-      error: error.message 
-    });
+    logger.error('Error fetching customer service records', error);
+    next(error);
   }
 };
 
-// Get service record by employee ID
-const getServiceRecordsByEmployeeId = async (req, res) => {
-  console.log('====================================');
-  console.log('Calling ... ', req.params.employeeId);
-  console.log('====================================');
+/**
+ * Get service records by employee ID
+ * GET /api/service-record/employee/:employeeId
+ */
+const getServiceRecordsByEmployeeId = async (req, res, next) => {
   try {
-    const employeeId = req.params.employeeId;
-    const { sortBy = 'recent', limit = 50 } = req.query;
+    const { employeeId } = req.params;
+    const { sortBy = 'recent', page = 1, limit = 10 } = req.query;
 
     if (!employeeId) {
-      return res.status(400).json({ message: "Employee ID is required" });
+      logger.warn('Service record fetch: No employee ID provided');
+      return next(new AppError('Employee ID is required', 400));
     }
 
     // Verify employee exists
     const employee = await employeeModel.findById(employeeId);
     if (!employee) {
-      return res.status(404).json({ message: "Employee not found" });
+      logger.warn('Service record fetch: Employee not found', { employeeId });
+      return next(new AppError('Employee not found', 404));
     }
 
     // Build sort object
-    let sortObj = { createdAt: -1 }; // Default: most recent first
-    if (sortBy === 'oldest') {
-      sortObj = { createdAt: 1 };
-    } else if (sortBy === 'amount') {
-      sortObj = { totalAmount: -1 };
-    }
+    const sortObj = {
+      recent: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      amount: { totalAmount: -1 },
+    }[sortBy] || { createdAt: -1 };
 
-    // Fetch service records
+    const skip = (page - 1) * limit;
+
+    // Fetch service records with pagination
     const serviceRecords = await serviceRecordModel
       .find({ employeeId })
-      .populate("employeeId", "name email department")
-      .populate("customerId", "name email contactNumber")
-      .populate("appointmentId", "appointmentDate vehicleNumber")
+      .populate('employeeId', 'name email')
+      .populate('customerId', 'name email contactNumber')
+      .populate('appointmentId', 'appointmentDate vehicleNumber')
       .sort(sortObj)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
 
-    // Calculate statistics
+    // Get totals
     const totalRecords = await serviceRecordModel.countDocuments({ employeeId });
-    const completedRecords = await serviceRecordModel.countDocuments({ 
-      employeeId, 
-      status: 'completed' 
-    });
+    const completedRecords = await serviceRecordModel.countDocuments({ employeeId, status: 'completed' });
 
-    // Format service records for display
-    const formattedRecords = serviceRecords.map(record => ({
-      _id: record._id,
-      date: record.createdAt,
-      vehicleNumber: record.vehicleNumber,
-      description: record.serviceDescription,
-      customer: record.customerId,
-      partsCount: record.parts ? record.parts.length : 0,
-      laborCost: record.laborCost,
-      totalAmount: record.totalAmount,
-      status: record.status,
-      parts: record.parts,
-    }));
+    logger.info('Employee service records fetched successfully', { employeeId, count: serviceRecords.length });
 
     res.status(200).json({
       success: true,
-      employee: {
-        name: employee.name,
-        email: employee.email,
-        department: employee.department,
+      message: totalRecords === 0 ? 'No service records found' : 'Service records retrieved successfully',
+      data: {
+        employee: {
+          id: employee._id,
+          name: employee.name,
+          email: employee.email,
+        },
+        serviceRecords,
+        statistics: {
+          totalRecords,
+          completedRecords,
+          pendingRecords: totalRecords - completedRecords,
+        },
+        pagination: {
+          current: parseInt(page),
+          limit: parseInt(limit),
+          total: totalRecords,
+          pages: Math.ceil(totalRecords / limit),
+        },
       },
-      statistics: {
-        totalServiceRecords: totalRecords,
-        completedRecords: completedRecords,
-        pendingRecords: totalRecords - completedRecords,
-      },
-      serviceHistory: formattedRecords,
-      message: `Found ${totalRecords} service records for this employee`,
     });
   } catch (error) {
-    console.log("Error fetching service records:", error);
-    res.status(500).json({ 
-      success: false,
-      message: "Error fetching service records",
-      error: error.message 
-    });
+    logger.error('Error fetching employee service records', error);
+    next(error);
   }
 };
 

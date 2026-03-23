@@ -1,73 +1,156 @@
+/**
+ * User Controller
+ * Handles user registration, login, and authentication
+ */
+
 const User = require("../models/userModel");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const logger = require("../utils/logger");
+const { AppError } = require("../utils/errorHandler");
+const { validateEmail, validatePassword, validateRequiredFields } = require("../utils/validation");
 
-const createUser = async (req, res) => {
-    const { name, email, password, role } = req.body;
+const SALT_ROUNDS = 10;
+const JWT_EXPIRY = '7d';
 
-    if (!name || !email || !password) {
-        return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    // Hash the password before saving
-    const hashedPassword = await bcryptjs.hash(password, 10);
-
+/**
+ * Create a new user
+ * POST /api/user/register
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const createUser = async (req, res, next) => {
     try {
+        const { name, email, password, role } = req.body;
+
+        // Validate required fields
+        const validation = validateRequiredFields(
+            { name, email, password },
+            ['name', 'email', 'password']
+        );
+
+        if (!validation.isValid) {
+            logger.warn('User registration: Missing required fields', validation.missingFields);
+            return next(new AppError(`Missing required fields: ${validation.missingFields.join(', ')}`, 400));
+        }
+
+        // Validate email format
+        if (!validateEmail(email)) {
+            logger.warn('User registration: Invalid email format', { email });
+            return next(new AppError('Invalid email format', 400));
+        }
+
+        // Validate password strength
+        if (!validatePassword(password)) {
+            logger.warn('User registration: Weak password');
+            return next(new AppError('Password must be at least 8 characters with uppercase, lowercase, and numbers', 400));
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            logger.warn('User registration: Email already exists', { email });
+            return next(new AppError('Email already registered', 400));
+        }
+
+        // Hash the password
+        const hashedPassword = await bcryptjs.hash(password, SALT_ROUNDS);
+
+        // Create new user
         const user = new User({
-            name,
-            email,
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
             password: hashedPassword,
-            role,
+            role: role || 'customer',
         });
 
         const savedUser = await user.save();
 
+        logger.info('User created successfully', { userId: savedUser._id, email: savedUser.email });
+
         res.status(201).json({
+            success: true,
             message: 'User created successfully',
-            user: savedUser,
+            data: {
+                user: {
+                    id: savedUser._id,
+                    name: savedUser.name,
+                    email: savedUser.email,
+                    role: savedUser.role,
+                },
+            },
         });
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
-        res.status(500).json({ message: 'Error creating user' });
+        logger.error('Error creating user', error);
+        next(error);
     }
 };
 
-const loginUser = async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Missing required fields' });
-    }
-
+/**
+ * Login user and generate JWT token
+ * POST /api/user/login
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const loginUser = async (req, res, next) => {
     try {
-        const user = await User.findOne({ email });
+        const { email, password } = req.body;
 
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        // Validate required fields
+        const validation = validateRequiredFields(
+            { email, password },
+            ['email', 'password']
+        );
+
+        if (!validation.isValid) {
+            logger.warn('User login: Missing required fields', validation.missingFields);
+            return next(new AppError(`Missing required fields: ${validation.missingFields.join(', ')}`, 400));
         }
 
+        // Find user by email
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+        if (!user) {
+            logger.warn('User login: User not found', { email });
+            return next(new AppError('Invalid email or password', 401));
+        }
+
+        // Check password
         const isPasswordCorrect = await bcryptjs.compare(password, user.password);
 
         if (!isPasswordCorrect) {
-            return res.status(401).json({ message: 'Incorrect password' });
+            logger.warn('User login: Incorrect password', { email });
+            return next(new AppError('Invalid email or password', 401));
         }
 
-        const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET_KEY);
+        // Generate JWT token
+        const token = jwt.sign(
+            { userId: user._id, email: user.email, role: user.role },
+            process.env.JWT_SECRET_KEY,
+            { expiresIn: JWT_EXPIRY }
+        );
+
+        logger.info('User logged in successfully', { userId: user._id, email: user.email });
 
         res.status(200).json({
+            success: true,
             message: 'Login successful',
-            token,
+            data: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                },
+            },
         });
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
-        res.status(500).json({ message: 'Error logging in' });
-    }   
+        logger.error('Error during user login', error);
+        next(error);
+    }
 };
-
-
 
 module.exports = { createUser, loginUser };

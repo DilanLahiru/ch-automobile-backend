@@ -1,127 +1,27 @@
+/**
+ * Appointment Controller
+ * Handles appointment CRUD operations and customer interactions
+ */
+
 const appointmentModel = require("../models/appointmentModel");
 const customerModel = require("../models/customerModel");
 const { generatePassword } = require("../utils/passwordGenerator");
 const { sendWelcomeEmail, sendAppointmentConfirmationEmail } = require("../utils/emailService");
 const bcryptjs = require("bcryptjs");
+const logger = require("../utils/logger");
+const { AppError } = require("../utils/errorHandler");
+const { validateEmail, validateRequiredFields } = require("../utils/validation");
 
-const createAppointment = async (req, res) => {
-  const {
-    customerId,
-    customerName,
-    customerContactNumber,
-    appointmentDate,
-    appointmentTime,
-    vehicleNumber,
-    vehicleModel,
-    serviceType,
-    status,
-    note,
-    createdBy,
-  } = req.body;
+const SALT_ROUNDS = 10;
 
-  if (
-    !customerId ||
-    !customerName ||
-    !customerContactNumber ||
-    !appointmentDate ||
-    !appointmentTime ||
-    !vehicleNumber ||
-    !vehicleModel ||
-    !serviceType ||
-    !status
-  ) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-
-  const customer = await customerModel.findById(customerId);
-
-  if (!customer) {
-    return res.status(404).json({ message: "Customer not found" });
-  }
-
-  const appointment = new appointmentModel({
-    customerId,
-    customerName,
-    customerContactNumber,
-    appointmentDate,
-    appointmentTime,
-    vehicleNumber,
-    vehicleModel,
-    serviceType,
-    status,
-    note,
-    createdBy,
-  });
-
+/**
+ * Create appointment for existing customer
+ * POST /api/appointment/create
+ */
+const createAppointment = async (req, res, next) => {
   try {
-    const savedAppointment = await appointment.save();
-    res
-      .status(201)
-      .json({
-        message: "Appointment created successfully",
-        appointment: savedAppointment,
-      });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Error creating appointment" });
-  }
-};
-
-const createAppointmentWithCustomer = async (req, res) => {
-  const {
-    customerName,
-    customerEmail,
-    customerContactNumber,
-    appointmentDate,
-    appointmentTime,
-    vehicleNumber,
-    vehicleModel,
-    serviceType,
-    status,
-    note,
-    createdBy,
-  } = req.body;
-
-  if (
-    !customerName ||
-    !customerEmail ||
-    !customerContactNumber ||
-    !appointmentDate ||
-    !appointmentTime ||
-    !vehicleNumber ||
-    !vehicleModel ||
-    !serviceType
-  ) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-
-  try {
-    // Check if customer already exists by email
-    let customer = await customerModel.findOne({ email: customerEmail });
-
-    // If customer doesn't exist, create a new one
-    if (!customer) {
-      // Generate a default password
-      const defaultPassword = generatePassword(12);
-
-      // Hash the password before saving
-      const hashedPassword = await bcryptjs.hash(defaultPassword, 10);
-
-      customer = new customerModel({
-        name: customerName,
-        email: customerEmail,
-        contactNumber: customerContactNumber,
-        password: hashedPassword,
-      });
-      await customer.save();
-
-    // Send welcome email with the password
-    const emailSent = await sendWelcomeEmail(customerEmail, customerName, defaultPassword);
-    }
-
-    // Create the appointment with the customer ID
-    const appointment = new appointmentModel({
-      customerId: customer._id,
+    const {
+      customerId,
       customerName,
       customerContactNumber,
       appointmentDate,
@@ -129,104 +29,313 @@ const createAppointmentWithCustomer = async (req, res) => {
       vehicleNumber,
       vehicleModel,
       serviceType,
-      status: status || "pending",
+      status,
       note,
       createdBy,
+    } = req.body;
+
+    // Validate required fields
+    const validation = validateRequiredFields(
+      {
+        customerId,
+        customerName,
+        customerContactNumber,
+        appointmentDate,
+        appointmentTime,
+        vehicleNumber,
+        vehicleModel,
+        serviceType,
+        status,
+      },
+      [
+        'customerId',
+        'customerName',
+        'customerContactNumber',
+        'appointmentDate',
+        'appointmentTime',
+        'vehicleNumber',
+        'vehicleModel',
+        'serviceType',
+        'status',
+      ]
+    );
+
+    if (!validation.isValid) {
+      logger.warn('Appointment creation: Missing required fields', validation.missingFields);
+      return next(new AppError(`Missing required fields: ${validation.missingFields.join(', ')}`, 400));
+    }
+
+    // Validate customer exists
+    const customer = await customerModel.findById(customerId);
+    if (!customer) {
+      logger.warn('Appointment creation: Customer not found', { customerId });
+      return next(new AppError('Customer not found', 404));
+    }
+
+    // Create appointment
+    const appointment = new appointmentModel({
+      customerId,
+      customerName: customerName.trim(),
+      customerContactNumber: customerContactNumber.trim(),
+      appointmentDate,
+      appointmentTime,
+      vehicleNumber: vehicleNumber.trim(),
+      vehicleModel: vehicleModel.trim(),
+      serviceType: serviceType.trim(),
+      status: status.trim(),
+      note: note ? note.trim() : '',
+      createdBy: createdBy ? createdBy.trim() : '',
     });
 
     const savedAppointment = await appointment.save();
+    logger.info('Appointment created successfully', { appointmentId: savedAppointment._id, customerId });
+
     res.status(201).json({
-      message: "Appointment created successfully",
-      appointment: savedAppointment,
-      customer: customer,
-      emailSent: emailSent,
+      success: true,
+      message: 'Appointment created successfully',
+      data: { appointment: savedAppointment },
     });
-    console.log(savedAppointment);
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Error creating appointment" });
+    logger.error('Error creating appointment', error);
+    next(error);
   }
 };
 
-const getAppointments = async (req, res) => {
+/**
+ * Create appointment with auto-created customer
+ * POST /api/appointment/create-with-customer
+ */
+const createAppointmentWithCustomer = async (req, res, next) => {
   try {
-    const appointments = await appointmentModel.find();
-    res.status(200).json(appointments);
+    const {
+      customerName,
+      customerEmail,
+      customerContactNumber,
+      appointmentDate,
+      appointmentTime,
+      vehicleNumber,
+      vehicleModel,
+      serviceType,
+      status,
+      note,
+      createdBy,
+    } = req.body;
+
+    // Validate required fields
+    const validation = validateRequiredFields(
+      {
+        customerName,
+        customerEmail,
+        customerContactNumber,
+        appointmentDate,
+        appointmentTime,
+        vehicleNumber,
+        vehicleModel,
+        serviceType,
+      },
+      ['customerName', 'customerEmail', 'customerContactNumber', 'appointmentDate', 'appointmentTime', 'vehicleNumber', 'vehicleModel', 'serviceType']
+    );
+
+    if (!validation.isValid) {
+      logger.warn('Appointment creation: Missing required fields', validation.missingFields);
+      return next(new AppError(`Missing required fields: ${validation.missingFields.join(', ')}`, 400));
+    }
+
+    // Validate email
+    if (!validateEmail(customerEmail)) {
+      logger.warn('Appointment creation: Invalid email format', { email: customerEmail });
+      return next(new AppError('Invalid email format', 400));
+    }
+
+    // Check if customer exists
+    let customer = await customerModel.findOne({ email: customerEmail.toLowerCase().trim() });
+    let emailSent = false;
+
+    // Create customer if doesn't exist
+    if (!customer) {
+      const defaultPassword = generatePassword(12);
+      const hashedPassword = await bcryptjs.hash(defaultPassword, SALT_ROUNDS);
+
+      customer = new customerModel({
+        name: customerName.trim(),
+        email: customerEmail.toLowerCase().trim(),
+        contactNumber: customerContactNumber.trim(),
+        password: hashedPassword,
+      });
+
+      await customer.save();
+      emailSent = await sendWelcomeEmail(customerEmail, customerName, defaultPassword);
+      logger.info('New customer created for appointment', { customerId: customer._id, email: customerEmail });
+    }
+
+    // Create appointment
+    const appointment = new appointmentModel({
+      customerId: customer._id,
+      customerName: customerName.trim(),
+      customerContactNumber: customerContactNumber.trim(),
+      appointmentDate,
+      appointmentTime,
+      vehicleNumber: vehicleNumber.trim(),
+      vehicleModel: vehicleModel.trim(),
+      serviceType: serviceType.trim(),
+      status: status || 'pending',
+      note: note ? note.trim() : '',
+      createdBy: createdBy ? createdBy.trim() : '',
+    });
+
+    const savedAppointment = await appointment.save();
+    logger.info('Appointment created successfully', { appointmentId: savedAppointment._id, customerId: customer._id });
+
+    res.status(201).json({
+      success: true,
+      message: 'Appointment created successfully',
+      data: {
+        appointment: savedAppointment,
+        customer: {
+          id: customer._id,
+          name: customer.name,
+          email: customer.email,
+        },
+        emailSent,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching appointments" });
+    logger.error('Error creating appointment with customer', error);
+    next(error);
   }
 };
 
-// Update an appointment
-const updateAppointment = async (req, res) => {
+/**
+ * Get all appointments (paginated)
+ * GET /api/appointment
+ */
+const getAppointments = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Build filter
+    const filter = {};
+    if (status) filter.status = status;
+
+    const appointments = await appointmentModel.find(filter)
+      .limit(parseInt(limit))
+      .skip(parseInt(skip))
+      .sort({ createdAt: -1 });
+
+    const total = await appointmentModel.countDocuments(filter);
+
+    logger.info('Appointments fetched successfully', { count: appointments.length, total });
+
+    res.status(200).json({
+      success: true,
+      message: 'Appointments retrieved successfully',
+      data: {
+        appointments,
+        pagination: {
+          current: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching appointments', error);
+    next(error);
+  }
+};
+
+/**
+ * Update appointment status
+ * PUT /api/appointment/:id
+ */
+const updateAppointment = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     if (!id) {
-      return res.status(400).json({ message: "Appointment ID is required" });
+      logger.warn('Appointment update: No ID provided');
+      return next(new AppError('Appointment ID is required', 400));
     }
 
     if (!status) {
-      return res.status(400).json({ message: "Status is required" });
+      logger.warn('Appointment update: No status provided');
+      return next(new AppError('Status is required', 400));
     }
 
-    const appointment = await appointmentModel.findByIdAndUpdate(id, { status });
+    const appointment = await appointmentModel.findByIdAndUpdate(id, { status }, { new: true });
 
     if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
+      logger.warn('Appointment update: Appointment not found', { id });
+      return next(new AppError('Appointment not found', 404));
     }
 
-    if (appointment && status === "confirmed") {
-      // Send appointment confirmation email
-      const customer = await customerModel.findById(appointment.customerId);
-      const emailSent = await sendAppointmentConfirmationEmail(customer.email, appointment);
-
-      if (!emailSent) {
-        return res.status(500).json({ message: "Error sending appointment confirmation email" });
+    // Send confirmation email if status is confirmed
+    if (status === 'confirmed') {
+      try {
+        const customer = await customerModel.findById(appointment.customerId);
+        if (customer && customer.email) {
+          await sendAppointmentConfirmationEmail(customer.email, appointment);
+          logger.info('Confirmation email sent', { appointmentId: id, email: customer.email });
+        }
+      } catch (emailError) {
+        logger.warn('Error sending confirmation email', emailError);
+        // Don't fail the request if email fails
       }
     }
 
-    res.status(200).json({ message: "Appointment updated successfully", appointment });
+    logger.info('Appointment updated successfully', { appointmentId: id, status });
+
+    res.status(200).json({
+      success: true,
+      message: 'Appointment updated successfully',
+      data: { appointment },
+    });
   } catch (error) {
-    console.log("Error updating appointment:", error);
-    res.status(500).json({ message: "Error updating appointment" });
+    logger.error('Error updating appointment', error);
+    next(error);
   }
 };
 
-const getAppointmentsByCustomerId = async (req, res) => {
+/**
+ * Get appointments by customer ID (for authenticated customer)
+ * GET /api/appointment/customer/:customerId
+ */
+const getAppointmentsByCustomerId = async (req, res, next) => {
   try {
-    const userId = req.userId;
+    const customerId = req.userId || req.params.customerId;
 
-    console.log('====================================');
-    console.log("USER ID : " + userId);
-    console.log('====================================');
-
-    if (!userId) {
-      return res.status(400).json({ message: "Customer ID is required" });
+    if (!customerId) {
+      logger.warn('Appointment fetch: No customer ID provided');
+      return next(new AppError('Customer ID is required', 400));
     }
 
-    // Verify that the customer exists
-    const customer = await customerModel.findById(userId);
-    console.log('====================================');
-    console.log("customer " + customer);
-    console.log('====================================');
+    // Verify customer exists
+    const customer = await customerModel.findById(customerId);
     if (!customer) {
-      return res.status(404).json({ message: "Customer not found" });
+      logger.warn('Appointment fetch: Customer not found', { customerId });
+      return next(new AppError('Customer not found', 404));
     }
 
-    const customerId = userId;
+    // Fetch customer appointments
+    const appointments = await appointmentModel.find({ customerId })
+      .sort({ createdAt: -1 });
 
-    const appointments = await appointmentModel.find({ customerId });
+    logger.info('Customer appointments fetched successfully', { customerId, count: appointments.length });
 
-    if (appointments.length === 0) {
-      return res.status(200).json({ message: "No appointments found", appointments: [] });
-    }
-
-    res.status(200).json(appointments);
+    res.status(200).json({
+      success: true,
+      message: appointments.length === 0 ? 'No appointments found' : 'Appointments retrieved successfully',
+      data: {
+        appointments,
+        count: appointments.length,
+      },
+    });
   } catch (error) {
-    console.error("Error fetching appointments:", error);
-    res.status(500).json({ message: "Error fetching appointments" });
+    logger.error('Error fetching customer appointments', error);
+    next(error);
   }
 };
 
