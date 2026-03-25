@@ -4,10 +4,6 @@ const authMiddleware = (req, res, next) => {
   // Get token from header (handle case sensitivity)
   const token = req.headers.authorization || req.headers.Authorization;
 
-  console.log('====================================');
-  console.log(token);
-  console.log('====================================');
-
   if (!token) {
     return res.status(401).json({ message: 'No token provided' });
   }
@@ -20,13 +16,7 @@ const authMiddleware = (req, res, next) => {
     req.userId = decoded._id;
     next();
 
-    console.log('====================================');
-    console.log(decoded);
-    console.log('====================================');
   } catch (error) {
-    console.log('====================================');
-    console.log(error);
-    console.log('====================================');
     return res.status(401).json({ message: 'Invalid or expired token' });
   }
 };

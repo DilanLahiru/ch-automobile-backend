@@ -1,7 +1,7 @@
 const appointmentModel = require("../models/appointmentModel");
 const customerModel = require("../models/customerModel");
 const { generatePassword } = require("../utils/passwordGenerator");
-const { sendWelcomeEmail, sendAppointmentConfirmationEmail } = require("../utils/emailService");
+const { sendWelcomeEmail, sendAppointmentConfirmationEmail, sendAppointmentRejectionEmail } = require("../utils/emailService");
 const bcryptjs = require("bcryptjs");
 
 const createAppointment = async (req, res) => {
@@ -161,7 +161,7 @@ const getAppointments = async (req, res) => {
 const updateAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, reasonForRejection } = req.body;
 
     if (!id) {
       return res.status(400).json({ message: "Appointment ID is required" });
@@ -171,7 +171,7 @@ const updateAppointment = async (req, res) => {
       return res.status(400).json({ message: "Status is required" });
     }
 
-    const appointment = await appointmentModel.findByIdAndUpdate(id, { status });
+    const appointment = await appointmentModel.findByIdAndUpdate(id, { status, reasonForRejection }, { new: true });
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
@@ -184,6 +184,16 @@ const updateAppointment = async (req, res) => {
 
       if (!emailSent) {
         return res.status(500).json({ message: "Error sending appointment confirmation email" });
+      }
+    }
+
+    if (appointment && status === "rejected") {
+      // Send appointment rejection email
+      const customer = await customerModel.findById(appointment.customerId);
+      const emailSent = await sendAppointmentRejectionEmail(customer.email, customer.name, appointment);
+
+      if (!emailSent) {
+        return res.status(500).json({ message: "Error sending appointment rejection email" });
       }
     }
 

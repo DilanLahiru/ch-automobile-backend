@@ -30,9 +30,6 @@ const createEmployee = async (req, res) => {
             employee: savedEmployee,
         });
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
         res.status(500).json({ message: 'Error creating employee' });
     }
 };
@@ -47,4 +44,45 @@ const getEmployees = async (req, res) => {
     }
 };
 
-module.exports = { createEmployee, getEmployees };
+// Update employee
+const updateEmployee = async (req, res) => {
+    const { id } = req.params;
+    const { name, email, contactNumber, address, nicNumber, epfNumber } = req.body;
+
+    if (!name || !email || !contactNumber || !address || !nicNumber || !epfNumber) {
+        return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    try {
+        const employee = await Employee.findByIdAndUpdate(id, {
+            name,
+            email,
+            contactNumber,
+            address,
+            nicNumber,
+            epfNumber,
+        });
+        res.status(200).json({
+            message: 'Employee updated successfully',
+            employee,
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating employee' });
+    }
+};
+
+// Delete employee
+const deleteEmployee = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const employee = await Employee.findByIdAndDelete(id);
+        res.status(200).json({
+            message: 'Employee deleted successfully',
+            employee,
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting employee' });
+    }
+};
+
+module.exports = { createEmployee, getEmployees, updateEmployee, deleteEmployee };

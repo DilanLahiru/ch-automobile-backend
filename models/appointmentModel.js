@@ -58,6 +58,10 @@ const appointmentSchema = new mongoose.Schema({
     enum: ["customer", "admin"],
     default: "admin",
   },
+  reasonForRejection: {
+    type: String,
+    default: "",
+  },
 });
 
 module.exports = mongoose.model("appointment", appointmentSchema);
