@@ -1,410 +1,282 @@
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
+const PDFDocument = require("pdfkit");
+const fs = require("fs");
+const path = require("path");
 
-/**
- * Generate a clean white-themed professional invoice PDF
- * White theme · Poppins typography · Footer pinned to page bottom
- * @param {Object} serviceRecord - Service record with details
- * @param {Object} customer      - Customer information
- * @param {string} filePath      - Output path for the PDF
- * @returns {Promise<string>}    - Resolves with the output path
- */
 const generateInvoicePDF = async (serviceRecord, customer, filePath) => {
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({ size: 'A4', margin: 0, bufferPages: true });
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: "A4", margin: 0 });
 
-            const dir = path.dirname(filePath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-            const stream = fs.createWriteStream(filePath);
-            stream.on('finish', () => resolve(filePath));
-            stream.on('error', reject);
-            doc.pipe(stream);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
 
-            // ─────────────────────────────────────────────────────────────
-            //  FONT SETUP  (Poppins + Roboto, Helvetica fallback)
-            // ─────────────────────────────────────────────────────────────
-            const fontDir = path.join(__dirname, '../assets/fonts');
-            let hasPoppins = false;
-            let hasRoboto = false;
+      stream.on("finish", () => resolve(filePath));
+      stream.on("error", reject);
 
-            try {
-                if (fs.existsSync(path.join(fontDir, 'Poppins-Regular.ttf'))) {
-                    doc.registerFont('Pop',     path.join(fontDir, 'Poppins-Regular.ttf'));
-                    doc.registerFont('Pop-Med', path.join(fontDir, 'Poppins-Medium.ttf'));
-                    doc.registerFont('Pop-SB',  path.join(fontDir, 'Poppins-SemiBold.ttf'));
-                    doc.registerFont('Pop-Bold',path.join(fontDir, 'Poppins-Bold.ttf'));
-                    hasPoppins = true;
-                }
-            } catch (_) {}
+      // ─────────────────────────────────────────
+      // REGISTER FONTS
+      // ─────────────────────────────────────────
+      const fontDir = path.join(__dirname, "../assets/fonts");
+      doc.registerFont("Poppins", path.join(fontDir, "Poppins-Regular.ttf"));
 
-            try {
-                if (fs.existsSync(path.join(fontDir, 'Roboto-Regular.ttf'))) {
-                    doc.registerFont('Rob',     path.join(fontDir, 'Roboto-Regular.ttf'));
-                    doc.registerFont('Rob-Med', path.join(fontDir, 'Roboto-Medium.ttf'));
-                    doc.registerFont('Rob-SB',  path.join(fontDir, 'Roboto-SemiBold.ttf'));
-                    doc.registerFont('Rob-Bold',path.join(fontDir, 'Roboto-Bold.ttf'));
-                    hasRoboto = true;
-                }
-            } catch (_) {}
+      // ─────────────────────────────────────────
+      // COLORS & STYLING
+      // ─────────────────────────────────────────
+      const C = {
+        primary: "#126799",
+        primaryLight: "#0c3577",
+        accent: "#c8ddfc",
+        text: "#1f2937",
+        subText: "#6b7280",
+        lightText: "#9ca3af",
+        border: "#e5e7eb",
+        bgLight: "#f9fafb",
+        bgLighter: "#f3f4f6",
+        white: "#ffffff",
+        success: "#10b981"
+      };
 
-            const F = {
-                regular:   hasPoppins ? 'Pop'       : (hasRoboto ? 'Rob'       : 'Helvetica'),
-                medium:    hasPoppins ? 'Pop-Med'   : (hasRoboto ? 'Rob-Med'   : 'Helvetica'),
-                semibold:  hasPoppins ? 'Pop-SB'    : (hasRoboto ? 'Rob-SB'    : 'Helvetica-Bold'),
-                bold:      hasPoppins ? 'Pop-Bold'  : (hasRoboto ? 'Rob-Bold'  : 'Helvetica-Bold'),
-                roboto:    hasRoboto ? 'Rob'       : 'Helvetica',
-                robotoBold:hasRoboto ? 'Rob-Bold'  : 'Helvetica-Bold',
-                mono:      'Courier',
-            };
+      // ─────────────────────────────────────────
+      // LAYOUT
+      // ─────────────────────────────────────────
+      const PW = 595.28;
+      const PH = 841.89;
+      const ML = 45;
+      const MR = 45;
+      const CW = PW - ML - MR;
 
-            // ─────────────────────────────────────────────────────────────
-            //  COLOUR PALETTE  (white theme)
-            // ─────────────────────────────────────────────────────────────
-            const C = {
-                white:      '#ffffff',
-                offWhite:   '#f7f8fb',
-                hairline:   '#e4e6ef',
-                muted:      '#9097b8',
-                body:       '#4b5170',
-                heading:    '#17193a',
-                accent:     '#2a6f97',
-                accentSoft: '#eff4ff',
-                accentMid:  '#bfcffb',
-                success:    '#059669',
-                successBg:  '#ecfdf5',
-                gold:       '#d97706',
-                goldBg:     '#fffbeb',
-            };
+      let y = 0;
 
-            // ─────────────────────────────────────────────────────────────
-            //  PAGE GEOMETRY
-            // ─────────────────────────────────────────────────────────────
-            const PW       = 595.28;   // A4 width  (pt)
-            const PH       = 841.89;   // A4 height (pt)
-            const ML       = 44;       // left  margin
-            const MR       = 44;       // right margin
-            const CW       = PW - ML - MR;
-            const FOOTER_H = 54;
-            const FOOTER_Y = PH - FOOTER_H;
+      // ─────────────────────────────────────────
+      // FORMATTERS
+      // ─────────────────────────────────────────
+      const fmt = (n) =>
+        new Intl.NumberFormat("en-LK", {
+          style: "currency",
+          currency: "LKR",
+        }).format(n || 0);
 
-            // ─────────────────────────────────────────────────────────────
-            //  HELPERS
-            // ─────────────────────────────────────────────────────────────
-            const fmt   = n => `Rs. ${Number(n || 0).toFixed(2)}`;
-            const hline = (y, x1 = 0, x2 = PW, color = C.hairline, lw = 0.5) =>
-                doc.moveTo(x1, y).lineTo(x2, y).strokeColor(color).lineWidth(lw).stroke();
-            const vline = (x, y1, y2, color = C.hairline, lw = 0.5) =>
-                doc.moveTo(x, y1).lineTo(x, y2).strokeColor(color).lineWidth(lw).stroke();
+      const formatDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
 
-            // ─────────────────────────────────────────────────────────────
-            //  INVOICE DATA
-            // ─────────────────────────────────────────────────────────────
-            const invoiceNumber = serviceRecord._id
-                ? serviceRecord._id.toString().slice(-8).toUpperCase()
-                : 'N/A';
+      // ─────────────────────────────────────────
+      // TOP ACCENT BANNER
+      // ─────────────────────────────────────────
+      doc.rect(0, 0, PW, 8).fill(C.primary);
+      y = 8;
 
-            const rawStatus = (serviceRecord.status || 'COMPLETED').toUpperCase();
-            const issueDate = new Date(serviceRecord.createdAt || new Date());
-            const dueDate   = new Date(issueDate);
-            dueDate.setDate(dueDate.getDate() + 30);
-            const fmtDate   = d => d.toLocaleDateString('en-US', {
-                year: 'numeric', month: 'long', day: 'numeric',
-            });
+      // ─────────────────────────────────────────
+      // HEADER WITH LOGO & COMPANY INFO
+      // ─────────────────────────────────────────
+      y += 20;
+      const logoPath = path.join(__dirname, "../assets/Logo.png");
+      const logoSize = 220;
 
-            // Financials – always recalculate, never trust stored totalAmount
-            let partsSubtotal = 0;
-            (serviceRecord.parts || []).forEach(p => {
-                partsSubtotal += (p.price || 0) * (p.quantity || 0);
-            });
-            const laborCost  = serviceRecord.laborCost || 0;
-            const pretax     = partsSubtotal + laborCost;
-            const grandTotal = pretax;
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, ML, y, {
+          fit: [logoSize, logoSize],
+        });
+      }
 
-            // ═════════════════════════════════════════════════════════════
-            //  BACKGROUND + LEFT ACCENT RULE
-            // ═════════════════════════════════════════════════════════════
-            doc.rect(0, 0, PW, PH).fill(C.white);
-            doc.rect(0, 0, 4, PH).fill(C.accent);   // 4 pt blue left stripe
+      // Invoice Badge on Right
+      doc.rect(PW - MR - 140, y, 140, 88).fill(C.bgLighter);
+      doc.rect(PW - MR - 140, y, 140, 5).fill(C.primary);
 
-            // ═════════════════════════════════════════════════════════════
-            //  HEADER  (white, 106 pt tall)
-            // ═════════════════════════════════════════════════════════════
-            const HDR_H = 106;
-            doc.rect(4, 0, PW - 4, HDR_H).fill(C.white);
-            hline(HDR_H, 4, PW, C.hairline, 0.75);
+    //   const invoiceNumber = serviceRecord._id
+    //     ? serviceRecord._id.toString().slice(-6)
+    //     : "000001";
+    // Generate a random 6-digit invoice number for demonstration purposes
+    const invoiceNumber = Math.floor(Math.random() * 1000000);
 
-            // Logo + Company Info (Left side)
-            const LOGO_SIZE = 100;
-            const LOGO_X = ML;
-            const LOGO_Y = 16;
-            const LOGO_PATH = path.join(__dirname, '../assets/logo.png');
-            
-            try {
-                if (fs.existsSync(LOGO_PATH)) {
-                    doc.image(LOGO_PATH, LOGO_X, LOGO_Y, { width: LOGO_SIZE, height: LOGO_SIZE });
-                }
-            } catch (e) {
-                // Logo not found or error loading - continue without it
-            }
+      doc.fontSize(10).fillColor(C.subText).font("Poppins")
+        .text("INVOICE", PW - MR - 135, y + 8);
 
-            // Company info next to logo
-            const INFO_X = LOGO_X + LOGO_SIZE + 16;
-            const INFO_Y = LOGO_Y + 4;
-            
-            doc.font(F.bold).fontSize(16).fillColor(C.heading)
-               .text('CH Automobile', INFO_X, INFO_Y);
-            doc.font(F.regular).fontSize(7.5).fillColor(C.muted)
-               .text('Drive without worries', INFO_X, INFO_Y + 18);
-            doc.font(F.regular).fontSize(6.5).fillColor(C.body)
-               .text('support@chautomobile.com  ·  +1 (555) 123-4567  ·  www.chautomobile.com', INFO_X, INFO_Y + 28);
+      doc.fontSize(10).fillColor(C.primary).font("Poppins")
+        .text(`#${invoiceNumber}`, PW - MR - 135, y + 22);
 
-            // "INVOICE" title + number (Right side)
-            const INVOICE_RIGHT = PW - MR;
-            const INVOICE_Y = LOGO_Y + 2;
-            
-            doc.font(F.bold).fontSize(32).fillColor(C.accent)
-               .text('INVOICE', 0, INVOICE_Y, { width: INVOICE_RIGHT - 12, align: 'right' });
-            
-            doc.font(F.semibold).fontSize(9).fillColor(C.muted)
-               .text(`Invoice #${invoiceNumber}`, 0, INVOICE_Y + 32, { width: INVOICE_RIGHT - 12, align: 'right' });
+      doc.fontSize(8).fillColor(C.lightText)
+        .text(`Issued: ${formatDate(serviceRecord.createdAt)}`, PW - MR - 135, y + 38)
+        .text(`Status: Completed`, PW - MR - 135, y + 50)
+        .text(`Payment Amount: ${fmt(serviceRecord.laborCost + (serviceRecord.parts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0))}`, PW - MR - 135, y + 62);
 
-            // Status pill (right side, below invoice)
-            const isPositive = ['COMPLETED', 'PAID', 'DONE'].includes(rawStatus);
-            const pillBg     = isPositive ? C.successBg : C.goldBg;
-            const pillFg     = isPositive ? C.success   : C.gold;
-            const pillW      = 84;
-            const pillX      = INVOICE_RIGHT - pillW;
-            const pillY      = INVOICE_Y + 48;
-            doc.roundedRect(pillX, pillY, pillW, 20, 10).fill(pillBg);
-            doc.font(F.bold).fontSize(8).fillColor(pillFg)
-               .text(rawStatus, pillX, pillY + 6, { width: pillW, align: 'center' });
+      y += 110;
 
-            // ═════════════════════════════════════════════════════════════
-            //  META BAND  (off-white, 4 cells)
-            // ═════════════════════════════════════════════════════════════
-            const META_H = 56;
-            let y = HDR_H;
-            doc.rect(4, y, PW - 4, META_H).fill(C.offWhite);
-            hline(y + META_H, 4, PW, C.hairline, 0.75);
+      // ─────────────────────────────────────────
+      // DIVIDER
+      // ─────────────────────────────────────────
+      doc.moveTo(ML, y).lineTo(PW - MR, y).stroke(C.border);
+      y += 20;
 
-            const mColW = CW / 4;
-            const mData = [
-                { label: 'ISSUE DATE',   value: fmtDate(issueDate),                                      color: C.heading              },
-               //  { label: 'DUE DATE',     value: fmtDate(dueDate),                                        color: C.accent               },
-                { label: 'VEHICLE NO.',  value: (serviceRecord.vehicleNumber || '—').substring(0, 18),   color: C.heading, mono: true   },
-                { label: 'SERVICE',      value: (serviceRecord.serviceDescription || '—').substring(0, 22), color: C.heading            },
-            ];
+      // ─────────────────────────────────────────
+      // BILL TO & SERVICE DETAILS (2 COLUMNS)
+      // ─────────────────────────────────────────
+      const col1X = ML;
+      const col2X = ML + CW / 2 + 15;
 
-            mData.forEach((col, i) => {
-                const cx = ML + i * mColW + (i > 0 ? 12 : 0);
-                if (i > 0) vline(ML + i * mColW, y + 14, y + META_H - 14);
+      // Bill To
+      doc.fontSize(10).fillColor(C.primary).font("Poppins")
+        .text("BILL TO", col1X, y);
 
-                doc.font(F.semibold).fontSize(6.5).fillColor(C.muted)
-                   .text(col.label, cx, y + 13, { width: mColW - 16 });
+      doc.fontSize(12).fillColor(C.text).font("Poppins")
+        .text(customer.name || "N/A", col1X, y + 18);
 
-                doc.font(col.mono ? F.mono : F.semibold)
-                   .fontSize(col.mono ? 9.5 : 10.5)
-                   .fillColor(col.color)
-                   .text(col.value, cx, y + 25, { width: mColW - 16, lineBreak: false });
-            });
+      doc.fontSize(9).fillColor(C.subText)
+        .text(customer.email || "N/A", col1X, y + 38)
+        .text(customer.contactNumber || "N/A", col1X, y + 52)
+        .text("Vehicle Owner", col1X, y + 70);
 
-            y += META_H;
+      // Service Details
+      doc.fontSize(10).fillColor(C.primary).font("Poppins")
+        .text("SERVICE DETAILS", col2X, y);
 
-            // ═════════════════════════════════════════════════════════════
-            //  BILL TO / SERVICE INFORMATION
-            // ═════════════════════════════════════════════════════════════
-            const ADDR_H = 84;
-            doc.rect(4, y, PW - 4, ADDR_H).fill(C.white);
-            hline(y + ADDR_H, 4, PW, C.hairline, 0.75);
+      doc.fontSize(9).fillColor(C.subText)
+        .text("Vehicle Number:", col2X, y + 18);
+      doc.fontSize(10).fillColor(C.text).font("Poppins")
+        .text(serviceRecord.vehicleNumber || "-", col2X, y + 30);
 
-            const halfCW = Math.floor(CW / 2);
-            const col2X  = ML + halfCW + 16;
+      doc.fontSize(9).fillColor(C.subText)
+        .text("Service Type:", col2X, y + 48);
+      doc.fontSize(10).fillColor(C.text).font("Poppins")
+        .text(serviceRecord.serviceDescription || "-", col2X, y + 60);
 
-            // Left – Bill To
-            doc.rect(ML, y + 16, 3, 14).fill(C.accent);
-            doc.font(F.bold).fontSize(6.5).fillColor(C.accent)
-               .text('BILL TO', ML + 10, y + 16);
-            doc.font(F.bold).fontSize(13).fillColor(C.heading)
-               .text(customer.name || 'N/A', ML + 10, y + 28, { width: halfCW - 16 });
-            doc.font(F.regular).fontSize(9).fillColor(C.body)
-               .text(customer.email || 'N/A', ML + 10, y + 45)
-               .text(`Tel: ${customer.contactNumber || 'N/A'}`, ML + 10, y + 58);
+      y += 90;
 
-            // Right – Service Information
-            vline(ML + halfCW, y + 16, y + ADDR_H - 16);
-            doc.rect(col2X - 6, y + 16, 3, 14).fill(C.accent);
-            doc.font(F.bold).fontSize(6.5).fillColor(C.accent)
-               .text('SERVICE INFORMATION', col2X, y + 16);
-            doc.font(F.bold).fontSize(13).fillColor(C.heading)
-               .text(serviceRecord.serviceDescription || 'General Service', col2X, y + 28, { width: halfCW - 20 });
-            doc.font(F.regular).fontSize(9).fillColor(C.body)
-               .text(`Vehicle: ${serviceRecord.vehicleNumber || 'N/A'}`, col2X, y + 45)
-               .text(`Status: ${rawStatus}`, col2X, y + 58).fillColor(C.success);
+      // ─────────────────────────────────────────
+      // DIVIDER
+      // ─────────────────────────────────────────
+      doc.moveTo(ML, y).lineTo(PW - MR, y).stroke(C.border);
+      y += 15;
 
-            y += ADDR_H;
+      // ─────────────────────────────────────────
+      // ITEMS TABLE
+      // ─────────────────────────────────────────
+      const tableY = y;
+      const colDescX = ML;
+      const colQtyX = ML + 260;
+      const colPriceX = ML + 320;
+      const colTotalX = ML + 400;
 
-            // ═════════════════════════════════════════════════════════════
-            //  LINE ITEMS TABLE
-            // ═════════════════════════════════════════════════════════════
+      // Header
+      doc.rect(ML, tableY, CW, 32).fill(C.primary);
 
-            // Column geometry — anchored right → left so nothing overflows
-            const CA_W = 84;                        // Amount
-            const CP_W = 84;                        // Unit Price
-            const CQ_W = 42;                        // Qty
-            const CA_X = PW - MR - CA_W;            // Amount left edge
-            const CP_X = CA_X - CP_W - 8;           // Unit Price left edge
-            const CQ_X = CP_X - CQ_W - 8;           // Qty left edge
-            const CD_W = CQ_X - ML - 8;             // Description width
+      doc.fontSize(11).fillColor(C.white).font("Poppins")
+        .text("Description", colDescX + 12, tableY + 10)
+        .text("Qty", colQtyX + 8, tableY + 10)
+        .text("Unit Price", colPriceX + 5, tableY + 10)
+        .text("Total", colTotalX + 15, tableY + 10);
 
-            // Table header row
-            const TH_H = 26;
-            doc.rect(4, y, PW - 4, TH_H).fill(C.accent);
-            doc.font(F.semibold).fontSize(7.5).fillColor(C.white);
-            doc.text('Description', ML,   y + 9, { width: CD_W                    });
-            doc.text('Qty',         CQ_X, y + 9, { width: CQ_W, align: 'center'   });
-            doc.text('Unit Price',  CP_X, y + 9, { width: CP_W, align: 'right'    });
-            doc.text('Amount',      CA_X, y + 9, { width: CA_W, align: 'right'    });
-            y += TH_H;
+      y = tableY + 32;
 
-            // Data rows
-            const ROW_H = 25;
-            const parts = serviceRecord.parts || [];
+      // ─────────────────────────────────────────
+      // TABLE ROWS
+      // ─────────────────────────────────────────
+      let partsSubtotal = 0;
+      const parts = serviceRecord.parts || [];
 
-            if (parts.length > 0) {
-                parts.forEach((part, idx) => {
-                    const lineTotal = (part.price || 0) * (part.quantity || 0);
-                    const rowBg     = idx % 2 === 0 ? C.white : C.offWhite;
-                    doc.rect(4, y, PW - 4, ROW_H).fill(rowBg);
+      if (parts.length === 0) {
+        doc.rect(ML, y, CW, 30).fill(C.bgLighter);
+        doc.fontSize(10).fillColor(C.subText)
+          .text("No items in this service record", colDescX + 12, y + 10);
+        y += 30;
+      } else {
+        parts.forEach((p, i) => {
+          const total = (p.price || 0) * (p.quantity || 0);
+          partsSubtotal += total;
 
-                    const ry = y + 8;
+          const rowBg = i % 2 === 0 ? C.bgLight : C.white;
+          doc.rect(ML, y, CW, 30).fill(rowBg);
 
-                    // Description
-                    doc.font(F.mono).fontSize(9.5).fillColor(C.heading)
-                       .text((part.name || 'N/A').substring(0, 52), ML, ry, {
-                           width: CD_W, lineBreak: false,
-                       });
+          doc.fontSize(10).fillColor(C.text)
+            .text(p.name || "-", colDescX + 12, y + 8)
+            .text((p.quantity || 0).toString(), colQtyX + 8, y + 8)
+            .text(fmt(p.price || 0), colPriceX + 5, y + 8)
+            .text(fmt(total), colTotalX + 15, y + 8);
 
-                    // Qty pill
-                    const qtyStr = String(part.quantity || 0);
-                    const pillW2 = Math.max(26, doc.widthOfString(qtyStr) + 14);
-                    const pillX2 = CQ_X + (CQ_W - pillW2) / 2;
-                    doc.roundedRect(pillX2, y + 6, pillW2, 14, 4).fill(C.accentSoft);
-                    doc.font(F.mono).fontSize(9).fillColor(C.accent)
-                       .text(qtyStr, CQ_X, ry, { width: CQ_W, align: 'center' });
+          y += 30;
+        });
+      }
 
-                    // Unit price
-                    doc.font(F.regular).fontSize(9.5).fillColor(C.body)
-                       .text(fmt(part.price || 0), CP_X, ry, { width: CP_W, align: 'right' });
+      y += 10;
 
-                    // Line total
-                    doc.font(F.semibold).fontSize(9.5).fillColor(C.heading)
-                       .text(fmt(lineTotal), CA_X, ry, { width: CA_W, align: 'right' });
+      // ─────────────────────────────────────────
+      // DIVIDER
+      // ─────────────────────────────────────────
+      doc.moveTo(ML, y).lineTo(PW - MR, y).stroke(C.border);
+      y += 15;
 
-                    hline(y + ROW_H, ML, PW - MR, C.hairline, 0.35);
-                    y += ROW_H;
-                });
-            } else {
-                doc.rect(4, y, PW - 4, 36).fill(C.offWhite);
-                doc.font(F.regular).fontSize(9.5).fillColor(C.muted)
-                   .text('No parts or services recorded for this invoice.', ML, y + 13, {
-                       width: CW, align: 'center',
-                   });
-                y += 36;
-            }
+      // ─────────────────────────────────────────
+      // SUMMARY BOX
+      // ─────────────────────────────────────────
+      const laborCost = serviceRecord.laborCost || 0;
+      const totalAmount = partsSubtotal + laborCost;
 
-            y += 14;
-            hline(y, 4, PW, C.hairline, 0.75);
-            y += 16;
+      const summaryX = PW - MR - 180;
+      const summaryY = y;
 
-            // ═════════════════════════════════════════════════════════════
-            //  PAYMENT TERMS  +  TOTALS
-            // ═════════════════════════════════════════════════════════════
-            const NOTES_CW = Math.floor(CW * 0.48);
-            const AMT_X    = ML + NOTES_CW + 28;
-            const AMT_W    = PW - MR - AMT_X;
+      // Container
+      doc.rect(summaryX, summaryY, 180, 90).fill(C.bgLighter);
+      doc.rect(summaryX, summaryY, 180, 4).fill(C.primaryLight);
 
-            // — Payment terms (left) —
-            doc.font(F.bold).fontSize(6.5).fillColor(C.muted)
-               .text('PAYMENT TERMS', ML, y);
+      // Subtotal
+      doc.fontSize(9).fillColor(C.subText).font("Poppins")
+        .text("Subtotal:", summaryX + 12, summaryY + 12);
+      doc.fontSize(10).fillColor(C.text).font("Poppins")
+        .text(fmt(partsSubtotal), summaryX + 12, summaryY + 12, {
+          width: 156,
+          align: "right"
+        });
 
-            const noteLines = [
-                'Payment due upon vehicle pickup.',
-                'Cash, credit cards & digital payments accepted.',
-                 'Please contact us if you have any questions about this invoice.',
-            ];
-            noteLines.forEach((ln, i) => {
-                const ny = y + 14 + i * 15;
-                doc.circle(ML + 4, ny + 4.5, 2).fill(C.hairline);
-                doc.font(F.mono).fontSize(8.5).fillColor(C.body)
-                   .text(ln, ML + 12, ny, { width: NOTES_CW - 14 });
-            });
+      // Labor
+      doc.fontSize(9).fillColor(C.subText)
+        .text("Labor Cost:", summaryX + 12, summaryY + 30);
+      doc.fontSize(10).fillColor(C.text).font("Poppins")
+        .text(fmt(laborCost), summaryX + 12, summaryY + 30, {
+          width: 156,
+          align: "right"
+        });
 
-            // — Amounts (right) —
-            const drawAmt = (label, value, offsetY) => {
-                doc.font(F.mono).fontSize(9).fillColor(C.heading)
-                   .text(label, AMT_X, y + offsetY);
-                doc.font(F.mono).fontSize(9).fillColor(C.heading)
-                   .text(value, AMT_X, y + offsetY, { width: AMT_W, align: 'right' });
-            };
+      // Line
+      doc.moveTo(summaryX + 12, summaryY + 50).lineTo(summaryX + 168, summaryY + 50)
+        .stroke(C.border);
 
-            drawAmt('Parts Subtotal', fmt(partsSubtotal), 0);
+      // Total
+      doc.fontSize(11).fillColor(C.primary).font("Poppins")
+        .text("TOTAL:", summaryX + 12, summaryY + 60);
+      doc.fontSize(14).fillColor(C.primary).font("Poppins")
+        .text(fmt(totalAmount), summaryX + 12, summaryY + 60, {
+          width: 156,
+          align: "right"
+        });
 
-            let amtOff = 16;
-            if (laborCost > 0) {
-                drawAmt('Labor Cost', fmt(laborCost), amtOff);
-                amtOff += 16;
-            }
+      // ─────────────────────────────────────────
+      // FOOTER SECTION
+      // ─────────────────────────────────────────
+      doc.moveTo(ML, PH - 80).lineTo(PW - MR, PH - 80).stroke(C.border);
 
-            hline(y + amtOff, AMT_X, PW - MR, C.hairline, 0.5);
-            amtOff += 8;
+      doc.fontSize(10).fillColor(C.text).font("Poppins")
+        .text("Thank you for your business!", ML, PH - 70);
 
-            drawAmt('Subtotal', fmt(pretax),    amtOff);      amtOff += 15;
-            // drawAmt('Tax (5%)', fmt(taxAmount), amtOff);      amtOff += 20;
+      doc.fontSize(8).fillColor(C.subText)
+        .text("We appreciate your trust. For any queries, contact us at chautomob@gmail.com or +94 71 427 4163", ML, PH - 55);
 
-            // Grand total box
-            const GT_TOP_MARGIN = 12;
-            const GT_Y = y + amtOff + GT_TOP_MARGIN;
-            doc.roundedRect(AMT_X - 10, GT_Y, AMT_W + 10, 36, 6).fill(C.accent);
-            doc.font(F.mono).fontSize(17).fillColor(C.white)
-               .text(fmt(grandTotal), AMT_X, GT_Y + 10, { width: AMT_W, align: 'right' });
+      doc.fontSize(7).fillColor(C.lightText)
+        .text("© 2026 CH Automobile. All services come with a satisfaction guarantee. Invoice generated on " + new Date().toLocaleString("en-LK"), ML, PH - 30, {
+          width: CW,
+          align: "center"
+        });
 
-            // ═════════════════════════════════════════════════════════════
-            //  FOOTER  — absolutely pinned to bottom of page
-            // ═════════════════════════════════════════════════════════════
-            doc.rect(0, FOOTER_Y, PW, FOOTER_H).fill(C.offWhite);
-            doc.rect(0, FOOTER_Y, 4, FOOTER_H).fill(C.accent);
-            hline(FOOTER_Y, 0, PW, C.hairline, 0.75);
-
-            // Footer left
-            doc.font(F.regular).fontSize(8.5).fillColor(C.body)
-               .text(
-                   'Thank you for choosing CH Automobile — Drive without worries.',
-                   ML, FOOTER_Y + 11, { width: CW * 0.56 },
-               );
-            doc.font(F.regular).fontSize(7.5).fillColor(C.muted)
-               .text(
-                   'support@chautomobile.com  ·  www.chautomobile.com  ·  +1 (555) 123-4567',
-                   ML, FOOTER_Y + 26,
-               );
-
-            // Footer right
-            doc.font(F.semibold).fontSize(8.5).fillColor(C.heading)
-               .text(`Invoice #${invoiceNumber}`, 0, FOOTER_Y + 11, { width: PW - MR, align: 'right' });
-            doc.font(F.regular).fontSize(7.5).fillColor(C.muted)
-               .text(
-                   `Generated: ${new Date().toLocaleDateString('en-US')}  ·  Page 1 of 1`,
-                   0, FOOTER_Y + 26, { width: PW - MR, align: 'right' },
-               );
-
-            doc.end();
-
-        } catch (error) {
-            reject(error);
-        }
-    });
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
 };
 
 module.exports = { generateInvoicePDF };
