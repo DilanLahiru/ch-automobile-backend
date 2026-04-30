@@ -2,9 +2,9 @@ const Employee = require('../models/employeeModel');
 
 
 const createEmployee = async (req, res) => {
-    const { name, email, contactNumber, address, nicNumber, epfNumber } = req.body;
+    const { name, email, contactNumber, address, nicNumber } = req.body;
 
-    if (!name || !email || !contactNumber || !address || !nicNumber || !epfNumber) {
+    if (!name || !email || !contactNumber || !address || !nicNumber) {
         return res.status(400).json({ message: 'Missing required fields' });
     }
 
@@ -21,7 +21,6 @@ const createEmployee = async (req, res) => {
             contactNumber,
             address,
             nicNumber,
-            epfNumber,
             createdAt: Date.now(),
         });
         const savedEmployee = await employee.save();

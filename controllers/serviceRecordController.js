@@ -111,6 +111,8 @@ const getServiceRecords = async (req, res) => {
       .populate("employeeId", "name email")
       .populate("customerId", "name email contactNumber");
 
+      // Sort by most recent first
+    serviceRecords.sort((a, b) => b.createdAt - a.createdAt);
     res.status(200).json(serviceRecords);
   } catch (error) {
     console.log(error);
