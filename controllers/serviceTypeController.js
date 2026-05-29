@@ -1,7 +1,7 @@
 const serviceTypeModel = require("../models/serviceTypeModel");
 
 const createServiceType = async (req, res) => {
-    const { name } = req.body;
+    const { name, price } = req.body;
 
     if (!name) {
         return res.status(400).json({ message: 'Missing required fields' });
@@ -10,6 +10,7 @@ const createServiceType = async (req, res) => {
     try {
         const serviceType = new serviceTypeModel({
             name,
+            price,
         });
         const savedServiceType = await serviceType.save();
         res.status(201).json({
@@ -31,7 +32,27 @@ const getServiceTypes = async (req, res) => {
     }
 };
 
+// Update Service Type using ID
+const updateServiceType = async (req, res) => {
+    const { id } = req.params;
+    const { name, price } = req.body;
+
+    try {
+        const updatedServiceType = await serviceTypeModel.findByIdAndUpdate(
+            id,
+            { name, price },
+        );
+        res.status(200).json({
+            message: 'Service Type updated successfully',
+            serviceType: updatedServiceType,
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating service type' });
+    }
+};
+
 module.exports = {
     createServiceType,
     getServiceTypes,
+    updateServiceType,
 };

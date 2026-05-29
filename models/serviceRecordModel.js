@@ -39,6 +39,22 @@ const serviceRecordSchema = new mongoose.Schema({
       },
     },
   ],
+  otherCharges: [
+    {
+      _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'otherCharge',
+        required: true,
+      },
+      chargeType: {
+        type: String,
+        required: true,
+      },
+      amount: {
+        type: Number,
+      },
+    }
+  ],
   laborCost: {
     type: Number,
     default: 0,
@@ -59,6 +75,21 @@ const serviceRecordSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+  paymentType: {
+    type: String,
+    default: 'cash',
+    required: true,
+  },
+  serviceType: {
+    type: String,
+    default: 'General Service',
+    required: true,
+  },
+  serviceTypeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'serviceType',
+    required: true,
   },
 });
 

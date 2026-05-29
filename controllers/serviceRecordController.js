@@ -12,11 +12,15 @@ const createServiceRecord = async (req, res) => {
     employeeId,
     customerId,
     parts,
+    otherCharges,
     laborCost,
     totalAmount,
     status,
     vehicleNumber,
     serviceDescription,
+    paymentType,
+    serviceType,
+    serviceTypeId,
   } = req.body;
 
   if (
@@ -25,7 +29,10 @@ const createServiceRecord = async (req, res) => {
     !appointmentId ||
     !parts ||
     !Array.isArray(parts) ||
-    parts.length === 0
+    parts.length === 0 ||
+    !paymentType ||
+    !serviceType ||
+    !serviceTypeId
   ) {
     return res
       .status(400)
@@ -53,7 +60,6 @@ const createServiceRecord = async (req, res) => {
         .status(404)
         .json({ message: `Product with ID ${part._id} not found` });
     }
-    console.log("Product :", product.name, "Quantity:", product.quantity);
 
     if (product.quantity < part.quantity) {
       return res.status(400).json({
@@ -67,11 +73,15 @@ const createServiceRecord = async (req, res) => {
     employeeId,
     customerId,
     parts,
+    otherCharges,
     laborCost: laborCost || 0,
     totalAmount: totalAmount || 0,
     status: status || "pending",
     vehicleNumber,
     serviceDescription,
+    paymentType,
+    serviceType,
+    serviceTypeId,
   });
 
   try {
@@ -99,11 +109,11 @@ const createServiceRecord = async (req, res) => {
       serviceRecord: savedServiceRecord,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Error creating service record" });
   }
 };
 
+// Get all service records with employee and customer details
 const getServiceRecords = async (req, res) => {
   try {
     const serviceRecords = await serviceRecordModel
@@ -115,7 +125,6 @@ const getServiceRecords = async (req, res) => {
     serviceRecords.sort((a, b) => b.createdAt - a.createdAt);
     res.status(200).json(serviceRecords);
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Error fetching service records" });
   }
 };
@@ -186,6 +195,9 @@ const getServiceRecordsByCustomerId = async (req, res) => {
       laborCost: record.laborCost,
       totalAmount: record.totalAmount,
       parts: record.parts,
+      otherCharges: record.otherCharges,
+      paymentType: record.paymentType,
+      serviceType: record.serviceType,
     }));
 
     res.status(200).json({
@@ -222,9 +234,6 @@ const getServiceRecordsByCustomerId = async (req, res) => {
 
 // Get service record by employee ID
 const getServiceRecordsByEmployeeId = async (req, res) => {
-  console.log('====================================');
-  console.log('Calling ... ', req.params.employeeId);
-  console.log('====================================');
   try {
     const employeeId = req.params.employeeId;
     const { sortBy = 'recent', limit = 50 } = req.query;
@@ -275,6 +284,8 @@ const getServiceRecordsByEmployeeId = async (req, res) => {
       totalAmount: record.totalAmount,
       status: record.status,
       parts: record.parts,
+      paymentType: record.paymentType,
+      serviceType: record.serviceType,
     }));
 
     res.status(200).json({
@@ -293,7 +304,6 @@ const getServiceRecordsByEmployeeId = async (req, res) => {
       message: `Found ${totalRecords} service records for this employee`,
     });
   } catch (error) {
-    console.log("Error fetching service records:", error);
     res.status(500).json({ 
       success: false,
       message: "Error fetching service records",
