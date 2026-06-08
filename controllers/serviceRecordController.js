@@ -11,7 +11,7 @@ const createServiceRecord = async (req, res) => {
     appointmentId,
     employeeId,
     customerId,
-    parts,
+    parts = [],
     otherCharges,
     laborCost,
     totalAmount,
@@ -27,9 +27,6 @@ const createServiceRecord = async (req, res) => {
     !employeeId ||
     !customerId ||
     !appointmentId ||
-    !parts ||
-    !Array.isArray(parts) ||
-    parts.length === 0 ||
     !paymentType ||
     !serviceType ||
     !serviceTypeId
@@ -53,7 +50,8 @@ const createServiceRecord = async (req, res) => {
   }
 
   // Verify all products exist and check stock availability
-  for (const part of parts) {
+  
+  for (const part of parts || []) {
     const product = await productModel.findById(part._id);
     if (!product) {
       return res
@@ -72,7 +70,7 @@ const createServiceRecord = async (req, res) => {
     appointmentId,
     employeeId,
     customerId,
-    parts,
+    parts : parts || [],
     otherCharges,
     laborCost: laborCost || 0,
     totalAmount: totalAmount || 0,
@@ -92,7 +90,7 @@ const createServiceRecord = async (req, res) => {
     for (const part of parts) {
       await productModel.findByIdAndUpdate(
         part._id,
-        { $inc: { quantity: -part.quantity } },
+        { $inc: { quantity: -part.quantity } }, 
         { new: true },
       );
     }
@@ -101,7 +99,7 @@ const createServiceRecord = async (req, res) => {
     
     // Send service completion email to customer
     if (customer.email) {
-      await sendServiceCompletionEmail(customer.email, customer.name, savedServiceRecord);
+      await sendServiceCompletionEmail(savedServiceRecord, customer.email, customer.name, customer.contactNumber);
     }
     
     res.status(201).json({
