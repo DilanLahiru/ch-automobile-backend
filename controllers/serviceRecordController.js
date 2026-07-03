@@ -12,31 +12,67 @@ const createServiceRecord = async (req, res) => {
     employeeId,
     customerId,
     parts = [],
-    otherCharges,
+    otherCharges = [],
     laborCost,
     totalAmount,
     status,
     vehicleNumber,
     serviceDescription,
     paymentType,
-    serviceType,
-    serviceTypeId,
+    invoiceNumber,
+    serviceTypeEntries = [],
+    cardProcessingFee = 0,
   } = req.body;
+
+  const normalizedParts = Array.isArray(parts) ? parts : [];
+  const normalizedOtherCharges = Array.isArray(otherCharges) ? otherCharges : [];
+  const normalizedServiceTypeEntries = Array.isArray(serviceTypeEntries)
+    ? serviceTypeEntries
+    : [];
+
+  const normalizedServiceDescription =
+    serviceDescription ||
+    normalizedServiceTypeEntries
+      .map((entry) => entry?.description)
+      .filter(Boolean)
+      .join(" | ") ||
+    "Service completed";
+
+  const normalizedServiceType =
+    // serviceType ||
+    normalizedServiceTypeEntries[0]?.serviceType ||
+    "General Service";
+
+  const normalizedLaborCost =
+    laborCost ??
+    normalizedServiceTypeEntries.reduce(
+      (sum, entry) =>
+        sum + (Number(entry?.laborCost) || Number(entry?.servicePrice) || 0),
+      0,
+    );
+
+  const otherChargesTotal = normalizedOtherCharges.reduce(
+    (sum, charge) => sum + (Number(charge?.amount) || 0),
+    0,
+  );
+
+  const normalizedTotalAmount =
+    totalAmount ??
+    Number(normalizedLaborCost || 0) +
+      Number(cardProcessingFee || 0) +
+      otherChargesTotal;
 
   if (
     !employeeId ||
     !customerId ||
     !appointmentId ||
     !paymentType ||
-    !serviceType ||
-    !serviceTypeId
+    !invoiceNumber ||
+    (!normalizedServiceType && normalizedServiceTypeEntries.length === 0)
   ) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Missing required fields: employeeId, customerId, and parts array",
-      });
+    return res.status(400).json({
+      message: "Cannot create service record. Missing required fields",
+    });
   }
 
   const customer = await customerModel.findById(customerId);
@@ -50,18 +86,20 @@ const createServiceRecord = async (req, res) => {
   }
 
   // Verify all products exist and check stock availability
-  
-  for (const part of parts || []) {
-    const product = await productModel.findById(part._id);
-    if (!product) {
-      return res
-        .status(404)
-        .json({ message: `Product with ID ${part._id} not found` });
+  for (const part of normalizedParts) {
+    const productId = part?._id || part?.id;
+    if (!productId) {
+      return res.status(400).json({ message: "Invalid product entry in parts" });
     }
 
-    if (product.quantity < part.quantity) {
+    const product = await productModel.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: `Product with ID ${productId} not found` });
+    }
+
+    if (product.quantity < (Number(part?.quantity) || 0)) {
       return res.status(400).json({
-        message: `Insufficient stock for product ${product.name}. Available: ${product.quantity}, Requested: ${part.quantity}`,
+        message: `Insufficient stock for product ${product.name}. Available: ${product.quantity}, Requested: ${part?.quantity}`,
       });
     }
   }
@@ -70,38 +108,51 @@ const createServiceRecord = async (req, res) => {
     appointmentId,
     employeeId,
     customerId,
-    parts : parts || [],
-    otherCharges,
-    laborCost: laborCost || 0,
-    totalAmount: totalAmount || 0,
+    parts: normalizedParts,
+    otherCharges: normalizedOtherCharges,
+    laborCost: normalizedLaborCost || 0,
+    totalAmount: normalizedTotalAmount || 0,
     status: status || "pending",
     vehicleNumber,
-    serviceDescription,
+    serviceDescription: normalizedServiceDescription,
+    description: normalizedServiceDescription,
     paymentType,
-    serviceType,
-    serviceTypeId,
+    // serviceType: normalizedServiceType,
+    invoiceNumber,
+    cardProcessingFee: Number(cardProcessingFee || 0),
+    serviceTypeEntries: normalizedServiceTypeEntries,
   });
 
   try {
     // Update related appointment status to completed after service completion
     await appointmentModel.findByIdAndUpdate(appointmentId, { status: "completed" });
-    
+
     // Reduce product quantities in the database
-    for (const part of parts) {
+    for (const part of normalizedParts) {
+      const productId = part?._id || part?.id;
+      if (!productId) {
+        continue;
+      }
+
       await productModel.findByIdAndUpdate(
-        part._id,
-        { $inc: { quantity: -part.quantity } }, 
+        productId,
+        { $inc: { quantity: -Number(part?.quantity || 0) } },
         { new: true },
       );
     }
 
     const savedServiceRecord = await serviceRecord.save();
-    
+
     // Send service completion email to customer
     if (customer.email) {
-      await sendServiceCompletionEmail(savedServiceRecord, customer.email, customer.name, customer.contactNumber);
+      await sendServiceCompletionEmail(
+        savedServiceRecord,
+        customer.email,
+        customer.name,
+        customer.contactNumber,
+      );
     }
-    
+
     res.status(201).json({
       message: "Service record created successfully and appointment updated",
       serviceRecord: savedServiceRecord,
@@ -196,6 +247,7 @@ const getServiceRecordsByCustomerId = async (req, res) => {
       otherCharges: record.otherCharges,
       paymentType: record.paymentType,
       serviceType: record.serviceType,
+      invoiceNumber: record.invoiceNumber,
     }));
 
     res.status(200).json({
@@ -284,6 +336,7 @@ const getServiceRecordsByEmployeeId = async (req, res) => {
       parts: record.parts,
       paymentType: record.paymentType,
       serviceType: record.serviceType,
+      invoiceNumber: record.invoiceNumber,
     }));
 
     res.status(200).json({

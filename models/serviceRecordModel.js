@@ -5,6 +5,11 @@ const serviceRecordSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'appointment',
   },
+  invoiceNumber: {
+    type: String,
+    required: true,
+    unique: true,
+  },
   employeeId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'employee',
@@ -81,16 +86,29 @@ const serviceRecordSchema = new mongoose.Schema({
     default: 'cash',
     required: true,
   },
-  serviceType: {
-    type: String,
-    default: 'General Service',
-    required: true,
+  cardProcessingFee: {
+    type: Number,
+    default: 0,
   },
-  serviceTypeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'serviceType',
-    required: true,
-  },
+  serviceTypeEntries: [
+    {
+      id: {
+        type: mongoose.Schema.Types.Mixed,
+      },
+      description: {
+        type: String,
+      },
+      laborCost: {
+        type: Number,
+      },
+      servicePrice: {
+        type: Number,
+      },
+      serviceType: {
+        type: String,
+      },
+    },
+  ],
 });
 
 module.exports = mongoose.model('serviceRecord', serviceRecordSchema);

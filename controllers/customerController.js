@@ -35,8 +35,6 @@ const registerCustomer = async (req, res) => {
 
         // Send welcome email with the password
         const emailSent = await sendWelcomeEmail(email, name, defaultPassword);
-
-        console.log(emailSent);
         
 
         res.status(201).json({
@@ -50,9 +48,6 @@ const registerCustomer = async (req, res) => {
             emailSent: emailSent,
         });
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
         res.status(500).json({ message: 'Error creating customer' });
     }
 }
@@ -90,9 +85,6 @@ const loginCustomer = async (req, res) => {
             },
         });
     } catch (error) {
-        console.log('====================================');
-        console.log(error);
-        console.log('====================================');
         res.status(500).json({ message: 'Error logging in' });
     }
 };
