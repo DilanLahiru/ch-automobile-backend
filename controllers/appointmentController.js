@@ -62,7 +62,6 @@ const createAppointment = async (req, res) => {
         appointment: savedAppointment,
       });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Error creating appointment" });
   }
 };
@@ -141,9 +140,7 @@ const createAppointmentWithCustomer = async (req, res) => {
       customer: customer,
       emailSent: emailSent,
     });
-    console.log(savedAppointment);
   } catch (error) {
-    console.log(error);
     res.status(500).json({ message: "Error creating appointment" });
   }
 };
@@ -182,9 +179,9 @@ const updateAppointment = async (req, res) => {
       const customer = await customerModel.findById(appointment.customerId);
       const emailSent = await sendAppointmentConfirmationEmail(customer.email, appointment);
 
-      if (!emailSent) {
-        return res.status(500).json({ message: "Error sending appointment confirmation email" });
-      }
+      // if (!emailSent) {
+      //   return res.status(500).json({ message: "Error sending appointment confirmation email" });
+      // }
     }
 
     if (appointment && status === "rejected") {
@@ -192,14 +189,13 @@ const updateAppointment = async (req, res) => {
       const customer = await customerModel.findById(appointment.customerId);
       const emailSent = await sendAppointmentRejectionEmail(customer.email, customer.name, appointment);
 
-      if (!emailSent) {
-        return res.status(500).json({ message: "Error sending appointment rejection email" });
-      }
+      // if (!emailSent) {
+      //   return res.status(500).json({ message: "Error sending appointment rejection email" });
+      // }
     }
 
     res.status(200).json({ message: "Appointment updated successfully", appointment });
   } catch (error) {
-    console.log("Error updating appointment:", error);
     res.status(500).json({ message: "Error updating appointment" });
   }
 };
@@ -208,19 +204,12 @@ const getAppointmentsByCustomerId = async (req, res) => {
   try {
     const userId = req.userId;
 
-    console.log('====================================');
-    console.log("USER ID : " + userId);
-    console.log('====================================');
-
     if (!userId) {
       return res.status(400).json({ message: "Customer ID is required" });
     }
 
     // Verify that the customer exists
     const customer = await customerModel.findById(userId);
-    console.log('====================================');
-    console.log("customer " + customer);
-    console.log('====================================');
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }

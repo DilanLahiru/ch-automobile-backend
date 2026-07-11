@@ -42,6 +42,10 @@ const serviceRecordSchema = new mongoose.Schema({
         type: Number,
         required: true,
       },
+      discountPercent: {
+        type: Number,
+        default: 0,
+      },
     },
   ],
   otherCharges: [
@@ -87,6 +91,10 @@ const serviceRecordSchema = new mongoose.Schema({
     required: true,
   },
   cardProcessingFee: {
+    type: Number,
+    default: 0,
+  },
+  billDiscountPercent: {
     type: Number,
     default: 0,
   },
