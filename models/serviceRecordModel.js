@@ -110,10 +110,6 @@ const serviceRecordSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  billDiscountPercent: {
-    type: Number,
-    default: 0,
-  },
   serviceTypeEntries: [
     {
       id: {
