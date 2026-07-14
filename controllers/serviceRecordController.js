@@ -12,6 +12,7 @@ const createServiceRecord = async (req, res) => {
     employeeId,
     customerId,
     parts = [],
+    externalParts = [],
     otherCharges = [],
     laborCost,
     totalAmount,
@@ -26,6 +27,7 @@ const createServiceRecord = async (req, res) => {
   } = req.body;
 
   const normalizedParts = Array.isArray(parts) ? parts : [];
+  const normalizedExternalParts = Array.isArray(externalParts) ? externalParts : [];
   const normalizedOtherCharges = Array.isArray(otherCharges) ? otherCharges : [];
   const normalizedServiceTypeEntries = Array.isArray(serviceTypeEntries)
     ? serviceTypeEntries
@@ -57,11 +59,17 @@ const createServiceRecord = async (req, res) => {
     0,
   );
 
+  const externalPartsTotal = normalizedExternalParts.reduce(
+    (sum, part) => sum + (Number(part?.price) * Number(part?.quantity) || 0),
+    0,
+  );
+
   const normalizedTotalAmount =
     totalAmount ??
     Number(normalizedLaborCost || 0) +
       Number(cardProcessingFee || 0) +
-      otherChargesTotal;
+      otherChargesTotal +
+      externalPartsTotal;
 
   if (
     !employeeId ||
@@ -110,6 +118,7 @@ const createServiceRecord = async (req, res) => {
     employeeId,
     customerId,
     parts: normalizedParts,
+    externalParts: normalizedExternalParts,
     otherCharges: normalizedOtherCharges,
     laborCost: normalizedLaborCost || 0,
     totalAmount: normalizedTotalAmount || 0,
