@@ -129,6 +129,18 @@ const serviceRecordSchema = new mongoose.Schema({
       },
     },
   ],
+  totalDiscount: {
+    type: Number,
+    default: 0,
+  },
+  subtotalBeforeDiscount: {
+    type: Number,
+    default: 0,
+  },
+  subtotalAfterDiscount: {
+    type: Number,
+    default: 0,
+  },
 });
 
 module.exports = mongoose.model('serviceRecord', serviceRecordSchema);

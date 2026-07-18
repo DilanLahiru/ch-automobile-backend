@@ -23,6 +23,9 @@ const createServiceRecord = async (req, res) => {
     invoiceNumber,
     serviceTypeEntries = [],
     cardProcessingFee = 0,
+    totalDiscount = 0,
+    subtotalBeforeDiscount = 0,
+    subtotalAfterDiscount = 0,
   } = req.body;
 
   const normalizedParts = Array.isArray(parts) ? parts : [];
@@ -130,6 +133,9 @@ const createServiceRecord = async (req, res) => {
     invoiceNumber,
     cardProcessingFee: Number(cardProcessingFee || 0),
     serviceTypeEntries: normalizedServiceTypeEntries,
+    totalDiscount: Number(totalDiscount || 0),
+    subtotalBeforeDiscount: Number(subtotalBeforeDiscount || 0),
+    subtotalAfterDiscount: Number(subtotalAfterDiscount || 0),
   });
 
   try {
