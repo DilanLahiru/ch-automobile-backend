@@ -15,6 +15,7 @@ const serviceRecordRoute = require("./routes/serviceRecordRoute");
 const serviceTypeRoute = require("./routes/serviceTypeRoute");
 const oldServiceRecordRoute = require("./routes/oldServiceRecordRouter");
 const otherChargeRoutes = require("./routes/otherChargeRoute");
+const externalMaterialRoute = require("./routes/externalMaterialRoute");
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use("/api/service-record", serviceRecordRoute);
 app.use("/api/service-type", serviceTypeRoute);
 app.use("/api/old-service-record", oldServiceRecordRoute);
 app.use("/api/other-charge", otherChargeRoutes);
+app.use("/api/external-material", externalMaterialRoute);
 
 // ✅ HEALTH CHECK (IMPORTANT)
 app.get("/health", (req, res) => {

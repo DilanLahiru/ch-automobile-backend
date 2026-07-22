@@ -26,6 +26,7 @@ const createServiceRecord = async (req, res) => {
     totalDiscount = 0,
     subtotalBeforeDiscount = 0,
     subtotalAfterDiscount = 0,
+    currentMileage = 0,
   } = req.body;
 
   const normalizedParts = Array.isArray(parts) ? parts : [];
@@ -136,6 +137,7 @@ const createServiceRecord = async (req, res) => {
     totalDiscount: Number(totalDiscount || 0),
     subtotalBeforeDiscount: Number(subtotalBeforeDiscount || 0),
     subtotalAfterDiscount: Number(subtotalAfterDiscount || 0),
+    currentMileage: Number(currentMileage || 0),
   });
 
   try {

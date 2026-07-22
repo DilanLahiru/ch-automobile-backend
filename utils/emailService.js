@@ -1,7 +1,5 @@
 const nodemailer = require('nodemailer');
 const { generateInvoicePDF } = require('./invoicePDF');
-const fs = require('fs');
-const path = require('path');
 
 /**
  * Send a welcome email to a new customer
@@ -659,79 +657,30 @@ const sendServiceCompletionEmail = async (serviceRecord, customerEmail, customer
             html: htmlContent,
         };
 
-    //     // Generate and attach invoice PDF
-    //     const invoicesDir = path.join(__dirname, '../invoices');
-    //     const pdfFileName = `invoice_${serviceRef}_${Date.now()}.pdf`;
-    //     const pdfFilePath = path.join(invoicesDir, pdfFileName);
+        // Generate PDF in memory and attach directly (no backend file storage)
+        const pdfBuffer = await generateInvoicePDF(
+            serviceRecord,
+            customerEmail,
+            customerName,
+            customerContactNumber,
+        );
 
-    //     try {
-    //         await generateInvoicePDF(serviceRecord, { name: customerName, email: customerEmail }, pdfFilePath);
-            
-    //         // Attach PDF to email
-    //         mailOptions.attachments = [
-    //             {
-    //                 filename: `CH_Automobile_Invoice_${serviceRef}.pdf`,
-    //                 path: pdfFilePath,
-    //             }
-    //         ];
+                mailOptions.attachments = [
+                        {
+                                filename: `CH_Automobile_Invoice_${serviceRef}.pdf`,
+                                content: pdfBuffer,
+                                contentType: 'application/pdf',
+                        }
+                ];
 
-    //         await transporter.sendMail(mailOptions);
-    //         console.log(`✅ Service completion email with PDF invoice sent to ${customerEmail}`);
+                await transporter.sendMail(mailOptions);
+                console.log(`✅ Service completion email with PDF invoice sent to ${customerEmail}`);
 
-    //         // Clean up PDF after sending (optional - remove if you want to keep invoices)
-    //         // setTimeout(() => {
-    //         //     if (fs.existsSync(pdfFilePath)) {
-    //         //         fs.unlink(pdfFilePath, (err) => {
-    //         //             if (err) console.error('Error deleting PDF:', err);
-    //         //         });
-    //         //     }
-    //         // }, 5000);
-
-    //         return true;
-    //     } catch (pdfError) {
-    //         console.error('⚠️ PDF generation failed, sending email without attachment:', pdfError);
-    //         // Send email without PDF if PDF generation fails
-    //         await transporter.sendMail(mailOptions);
-    //         console.log(`✅ Service completion email sent to ${customerEmail} (without PDF)`);
-    //         return true;
-    //     }
-    // } catch (error) {
-    //     console.error('❌ Error sending service completion email:', error);
-    //     return false;
-    // }
-    // Generate PDF using Puppeteer (same as frontend)
-    const invoicesDir = path.join(__dirname, '../invoices');
-    if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
-    
-    const pdfFileName = `invoice_${serviceRef}_${Date.now()}.pdf`;
-    const pdfFilePath = path.join(invoicesDir, pdfFileName);
-
-    await generateInvoicePDF(serviceRecord, customerEmail, customerName, customerContactNumber, pdfFilePath);
-    
-    mailOptions.attachments = [
-      {
-        filename: `CH_Automobile_Invoice_${serviceRef}.pdf`,
-        path: pdfFilePath,
-      }
-    ];
-
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Service completion email with PDF invoice sent to ${customerEmail}`);
-
-    // Clean up PDF after sending
-    setTimeout(() => {
-      if (fs.existsSync(pdfFilePath)) {
-        fs.unlink(pdfFilePath, (err) => {
-          if (err) console.log('Error deleting PDF:', err);
-        });
-      }
-    }, 5000);
-
-    return true;
-  } catch (error) {
-    console.log('❌ Error sending service completion email:', error);
-    return false;
-  }
+                return true;
+        } catch (error) {
+                console.log('❌ Error sending service completion email:', error);
+                return false;
+        }
 };
 
 module.exports = { sendWelcomeEmail, sendAppointmentConfirmationEmail, sendServiceCompletionEmail, sendAppointmentRejectionEmail };

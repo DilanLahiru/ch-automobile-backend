@@ -622,9 +622,9 @@ function generateServiceHistoryHTML(serviceOrder, customerEmail, customerName, c
 /**
  * Generate PDF using Puppeteer from the same HTML
  * @param {Object} serviceOrder - Service record
- * @param {string} outputPath - File path to save PDF
+ * @returns {Promise<Buffer>} PDF buffer for email attachment
  */
-async function generateInvoicePDF(serviceOrder, customerEmail, customerName, customerContactNumber, outputPath) {
+async function generateInvoicePDF(serviceOrder, customerEmail, customerName, customerContactNumber) {
   if (!customerEmail || !customerName || !customerContactNumber) throw new Error(`Customer information is incomplete for service order id: ${serviceOrder._id}`);
 
   const browser = await puppeteer.launch({ 
@@ -634,13 +634,13 @@ async function generateInvoicePDF(serviceOrder, customerEmail, customerName, cus
   const page = await browser.newPage();
   const html = generateServiceHistoryHTML(serviceOrder, customerEmail, customerName, customerContactNumber);
   await page.setContent(html, { waitUntil: 'networkidle0' });
-  await page.pdf({
-    path: outputPath,
+   const pdfBuffer = await page.pdf({
     format: 'A4',
     printBackground: true,
     margin: { top: '20px', bottom: '20px', left: '15px', right: '15px' }
   });
   await browser.close();
+   return pdfBuffer;
 }
 
 module.exports = { generateInvoicePDF };
