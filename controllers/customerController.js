@@ -98,4 +98,39 @@ const loadAllCustomers = async (req, res) => {
     }
 }
 
-module.exports = { registerCustomer, loadAllCustomers, loginCustomer };
+// Implement removeCustomer function
+const deleteCustomer = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const deletedCustomer = await Customer.findByIdAndDelete(id);
+
+        if (!deletedCustomer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        res.status(200).json({ message: 'Customer removed successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error removing customer' });
+    }
+};
+
+// Implement updateCustomer function
+const updateCustomer = async (req, res) => {
+    const { id } = req.params;
+    const { name, email, contactNumber } = req.body;
+
+    try {
+        const updatedCustomer = await Customer.findByIdAndUpdate(id, { name, email, contactNumber });
+
+        if (!updatedCustomer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+
+        res.status(200).json({ message: 'Customer updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating customer' });
+    }
+};
+
+module.exports = { registerCustomer, loadAllCustomers, loginCustomer, deleteCustomer, updateCustomer };
