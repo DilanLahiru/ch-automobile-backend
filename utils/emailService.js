@@ -683,4 +683,50 @@ const sendServiceCompletionEmail = async (serviceRecord, customerEmail, customer
         }
 };
 
-module.exports = { sendWelcomeEmail, sendAppointmentConfirmationEmail, sendServiceCompletionEmail, sendAppointmentRejectionEmail };
+/**
+ * Send a password reset OTP email to a customer
+ * @param {string} customerEmail - Customer's email address
+ * @param {string} customerName - Customer's name
+ * @param {string} otp - One-time password
+ * @returns {Promise<boolean>} - Returns true if email sent successfully
+ */
+const sendOtpEmail = async (customerEmail, customerName, otp) => {
+    try {
+        const transporter = nodemailer.createTransport({
+            service: process.env.EMAIL_SERVICE || 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASSWORD,
+            },
+        });
+
+        const htmlContent = `
+            <h2>CH Automobile - Password Reset Request</h2>
+            <p>Dear ${customerName},</p>
+            <p>We received a request to reset your password. Use the OTP below to proceed:</p>
+            <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; text-align: center;">
+                <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; margin: 0;">${otp}</p>
+            </div>
+            <p>This OTP is valid for <strong>5 minutes</strong>. If you did not request a password reset, please ignore this email.</p>
+            <p>Best regards,<br/>CH Automobile Team</p>
+        `;
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: customerEmail,
+            subject: 'CH Automobile - Password Reset OTP',
+            html: htmlContent,
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ OTP email sent to ${customerEmail}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Error sending OTP email:', error);
+        return false;
+    }
+};
+
+module.exports = { sendWelcomeEmail, sendAppointmentConfirmationEmail, sendServiceCompletionEmail, sendAppointmentRejectionEmail, sendOtpEmail };
+
+

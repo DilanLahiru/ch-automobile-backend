@@ -7,7 +7,7 @@ const customerSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: true,
+    //required: true,
     unique: true,
   },
   contactNumber: {
@@ -16,6 +16,12 @@ const customerSchema = new mongoose.Schema({
   },
   password: {
     type: String,
+  },
+  resetPasswordOtp: {
+    type: String,
+  },
+  resetPasswordOtpExpires: {
+    type: Date,
   },
 });
 

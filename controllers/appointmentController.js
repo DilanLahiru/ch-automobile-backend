@@ -1,7 +1,11 @@
 const appointmentModel = require("../models/appointmentModel");
 const customerModel = require("../models/customerModel");
 const { generatePassword } = require("../utils/passwordGenerator");
-const { sendWelcomeEmail, sendAppointmentConfirmationEmail, sendAppointmentRejectionEmail } = require("../utils/emailService");
+const {
+  sendWelcomeEmail,
+  sendAppointmentConfirmationEmail,
+  sendAppointmentRejectionEmail,
+} = require("../utils/emailService");
 const bcryptjs = require("bcryptjs");
 
 const createAppointment = async (req, res) => {
@@ -55,12 +59,10 @@ const createAppointment = async (req, res) => {
 
   try {
     const savedAppointment = await appointment.save();
-    res
-      .status(201)
-      .json({
-        message: "Appointment created successfully",
-        appointment: savedAppointment,
-      });
+    res.status(201).json({
+      message: "Appointment created successfully",
+      appointment: savedAppointment,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error creating appointment" });
   }
@@ -114,8 +116,14 @@ const createAppointmentWithCustomer = async (req, res) => {
       });
       await customer.save();
 
-    // Send welcome email with the password
-    const emailSent = await sendWelcomeEmail(customerEmail, customerName, defaultPassword);
+      // Send welcome email with the password
+      if (!customerEmail) {
+        const emailSent = await sendWelcomeEmail(
+          customerEmail,
+          customerName,
+          defaultPassword,
+        );
+      }
     }
 
     // Create the appointment with the customer ID
@@ -168,7 +176,11 @@ const updateAppointment = async (req, res) => {
       return res.status(400).json({ message: "Status is required" });
     }
 
-    const appointment = await appointmentModel.findByIdAndUpdate(id, { status, reasonForRejection }, { new: true });
+    const appointment = await appointmentModel.findByIdAndUpdate(
+      id,
+      { status, reasonForRejection },
+      { new: true },
+    );
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found" });
@@ -177,7 +189,12 @@ const updateAppointment = async (req, res) => {
     if (appointment && status === "confirmed") {
       // Send appointment confirmation email
       const customer = await customerModel.findById(appointment.customerId);
-      const emailSent = await sendAppointmentConfirmationEmail(customer.email, appointment);
+      if (!customer.email) {
+        const emailSent = await sendAppointmentConfirmationEmail(
+          customer.email,
+          appointment,
+        );
+      }
 
       // if (!emailSent) {
       //   return res.status(500).json({ message: "Error sending appointment confirmation email" });
@@ -187,14 +204,20 @@ const updateAppointment = async (req, res) => {
     if (appointment && status === "rejected") {
       // Send appointment rejection email
       const customer = await customerModel.findById(appointment.customerId);
-      const emailSent = await sendAppointmentRejectionEmail(customer.email, customer.name, appointment);
+      const emailSent = await sendAppointmentRejectionEmail(
+        customer.email,
+        customer.name,
+        appointment,
+      );
 
       // if (!emailSent) {
       //   return res.status(500).json({ message: "Error sending appointment rejection email" });
       // }
     }
 
-    res.status(200).json({ message: "Appointment updated successfully", appointment });
+    res
+      .status(200)
+      .json({ message: "Appointment updated successfully", appointment });
   } catch (error) {
     res.status(500).json({ message: "Error updating appointment" });
   }
@@ -219,7 +242,9 @@ const getAppointmentsByCustomerId = async (req, res) => {
     const appointments = await appointmentModel.find({ customerId });
 
     if (appointments.length === 0) {
-      return res.status(200).json({ message: "No appointments found", appointments: [] });
+      return res
+        .status(200)
+        .json({ message: "No appointments found", appointments: [] });
     }
 
     res.status(200).json(appointments);

@@ -49,4 +49,24 @@ const getCategoryById = async (req, res) => {
     }
 };
 
-module.exports = { createCategory, getCategories, getCategoryById };
+// Update Category Name
+const updateCategoryById = async (req, res) => {
+    const {id} = req.params
+    const { name } = req.body;
+
+    if (!name) {
+        return res.status(404).json({ message: 'Missing required fields' });
+    }
+
+    try {
+        const updateCategory = await categoryModel.findByIdAndUpdate(id, {name},{ new: true });
+        res.status(201).json({
+            message: 'Category updated successfully',
+            categories: updateCategory
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating category' });
+    }
+}
+
+module.exports = { createCategory, getCategories, getCategoryById, updateCategoryById };

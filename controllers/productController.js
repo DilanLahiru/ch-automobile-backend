@@ -59,9 +59,9 @@ const getProducts = async (req, res) => {
 // Update Product
 const updateProduct = async (req, res) => {
     const { id } = req.params;
-    const { supplierId, categoryId, price, quantity, initialStock, minimumStock } = req.body;
+    const { name, supplierId, categoryId, price, quantity, initialStock, minimumStock } = req.body;
 
-    if (!supplierId || !categoryId || !price || !quantity || !initialStock || !minimumStock) {
+    if (!name || !supplierId || !categoryId || !price || !quantity || !initialStock || !minimumStock) {
         return res.status(400).json({ message: 'Missing required fields' });
     }
 
@@ -74,6 +74,7 @@ const updateProduct = async (req, res) => {
 
     try {
         const product = await productModel.findByIdAndUpdate(id, {
+            name,
             supplierId,
             categoryId,
             price,
@@ -82,7 +83,7 @@ const updateProduct = async (req, res) => {
             minimumStock,
             categoryName: category.name,
             supplierName: supplier.name,
-        });
+        }, { new: true });
         res.status(200).json({
             message: 'Product updated successfully',
             product,
